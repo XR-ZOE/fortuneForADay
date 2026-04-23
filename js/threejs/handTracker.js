@@ -174,10 +174,11 @@ const HandTracker = (() => {
       
       // 映射到 Three.js 空間
       // MediaPipe 座標：x 0~1（左到右），y 0~1（上到下），z 深度
-      // 注意：攝影機是鏡像的，所以 x 不需要翻轉
-      const mappedX = (palm.x - 0.5) * 12;  // 映射到 -6 ~ 6
-      const mappedY = -(palm.y - 0.5) * 8;  // 映射到 -4 ~ 4（翻轉 y）
-      const mappedZ = 3 - palm.z * 5;       // 深度映射
+      // 自拍鏡頭是鏡像的：MediaPipe x=0 是影像左側（使用者右手），
+      // 翻轉 x 讓使用者往左移，畫面也往左（鏡像一致）
+      const mappedX = -(palm.x - 0.5) * 12;  // 翻轉 x：映射到 6 ~ -6
+      const mappedY = -(palm.y - 0.5) * 8;   // 映射到 -4 ~ 4（翻轉 y）
+      const mappedZ = 3 - palm.z * 5;        // 深度映射
 
       handPosition.set(mappedX, mappedY, mappedZ);
 

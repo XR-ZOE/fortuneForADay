@@ -330,12 +330,38 @@ const App = (() => {
     });
   }
 
-  /** 螢幕點擊/觸碰 → 抓取當前射線指向的卡（若無則略過） */
+  /** 螢幕點擊/觸碰 → 抓取卡片
+   *  - 有手部射線指向時：抓取指向的卡片
+   *  - 無手部射線（一般手機 AR）：用攝影機正前方射線找最近的卡
+   */
   function _triggerARGrabNearest() {
+    // 優先：射線系統已有鎖定的卡
     if (arPointedCardIndex >= 0) {
       _grabARCard(arPointedCardIndex);
+      return;
     }
-    // 備援：若沒有指向任何卡（例如螢幕點擊時沒有手部射線），不動作
+
+    // Fallback：從攝影機正前方射線找最靠近的卡（手機普通 AR tap）
+    const cam = SceneManager.getCamera();
+    if (!cam || CardManager.getIsAnimating()) return;
+
+    const origin    = cam.position.clone();
+    const direction = new THREE.Vector3();
+    cam.getWorldDirection(direction);
+
+    let bestIdx   = -1;
+    let bestCosA  = 0.17; // cos(80°)，只要大致在前方 80° 內都算
+    const _wPos   = new THREE.Vector3();
+
+    CardManager.getCards().forEach((card, idx) => {
+      if (card._isRevealed) return;
+      card.getWorldPosition(_wPos);
+      const toCard = _wPos.clone().sub(origin).normalize();
+      const cosA   = toCard.dot(direction);
+      if (cosA > bestCosA) { bestCosA = cosA; bestIdx = idx; }
+    });
+
+    if (bestIdx >= 0) _grabARCard(bestIdx);
   }
 
   /**
