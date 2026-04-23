@@ -110,22 +110,28 @@ const SceneManager = (() => {
     scene.fog = null;
 
     // 請求 AR session
-    // - local-floor: 以使用者所在地板面為原點
-    // - hand-tracking: 讓裝置追蹤手部骨骼（optional, 不支援也能啟動）
+    // - local: 基礎參考空間（emulator 和大多裝置都支援）
+    // - local-floor / hand-tracking: 可選，不支援也能啟動
     const sessionInit = {
-      requiredFeatures: ['local-floor'],
-      optionalFeatures: ['hand-tracking'],
+      requiredFeatures: ['local'],
+      optionalFeatures: ['local-floor', 'hand-tracking'],
     };
 
     try {
       xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
 
-      // 設定參考空間類型
-      renderer.xr.setReferenceSpaceType('local-floor');
+      // 優先用 local-floor，否則回退到 local
+      const refSpaceType = xrSession.enabledFeatures?.includes('local-floor')
+        ? 'local-floor' : 'local';
+      renderer.xr.setReferenceSpaceType(refSpaceType);
       await renderer.xr.setSession(xrSession);
 
-      // 取得 referenceSpace，用於手部關節的世界座標轉換
-      xrReferenceSpace = await xrSession.requestReferenceSpace('local-floor');
+      // 取得 referenceSpace（手部追蹤座標轉換用）
+      try {
+        xrReferenceSpace = await xrSession.requestReferenceSpace(refSpaceType);
+      } catch {
+        xrReferenceSpace = await xrSession.requestReferenceSpace('local');
+      }
 
       isAR = true;
 
