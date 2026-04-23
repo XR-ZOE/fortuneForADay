@@ -552,6 +552,47 @@ const CardManager = (() => {
   }
 
   /**
+   * AR 模式專用抓取：原地翻轉，不飛移位置（避免座標空間轉換複雜度）
+   */
+  function grabCardAR(cardIndex, scene, onComplete) {
+    if (isAnimating || cardIndex < 0 || cardIndex >= cards.length) return;
+    const card = cards[cardIndex];
+    if (card._isRevealed) return;
+
+    isAnimating = true;
+    selectedCard = card;
+    card._isRevealed = true;
+
+    // 爆發粒子（世界座標）
+    const cardWorldPos = new THREE.Vector3();
+    card.getWorldPosition(cardWorldPos);
+    ParticleSystem.createBurst(scene, cardWorldPos, card._fortuneData.fortune.color);
+
+    // 原地翻轉（只改 rotation，不動 position）
+    gsap.to(card.rotation, {
+      y: 0,  // 正面朝向攝影機
+      z: 0,
+      duration: 1.0,
+      ease: 'power3.inOut',
+      onComplete: () => {
+        isAnimating = false;
+        if (onComplete) onComplete(card._fortuneData);
+      },
+    });
+
+    // 略微放大（原地縮放 1.5x）
+    gsap.to(card.scale, {
+      x: 1.5, y: 1.5, z: 1.5,
+      duration: 0.6,
+      ease: 'back.out(1.5)',
+    });
+
+    // 強光暈（AR 場景中光暈更醒目）
+    gsap.to(card._glowMesh.material, { opacity: 0.8, duration: 0.3 });
+    gsap.to(card._glowMesh.material, { opacity: 0, duration: 0.8, delay: 1.2 });
+  }
+
+  /**
    * 重置所有卡片
    */
   function resetCards(scene) {
@@ -622,7 +663,7 @@ const CardManager = (() => {
   }
 
   return {
-    createCards, updateOrbit, setHover, grabCard,
+    createCards, updateOrbit, setHover, grabCard, grabCardAR,
     resetCards, findClosestCard, getIsAnimating, getCards,
     setGroupPosition, setARMode,
   };

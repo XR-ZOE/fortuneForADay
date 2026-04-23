@@ -111,10 +111,16 @@ const SceneManager = (() => {
 
     // 請求 AR session
     // - local: 基礎參考空間（emulator 和大多裝置都支援）
-    // - local-floor / hand-tracking: 可選，不支援也能啟動
+    // - local-floor / hand-tracking / dom-overlay: 可選，不支援也能啟動
+    const arOverlayEl = document.getElementById('ar-overlay');
     const sessionInit = {
       requiredFeatures: ['local'],
-      optionalFeatures: ['local-floor', 'hand-tracking'],
+      optionalFeatures: [
+        'local-floor',
+        'hand-tracking',
+        ...(arOverlayEl ? ['dom-overlay'] : []),
+      ],
+      ...(arOverlayEl ? { domOverlay: { root: arOverlayEl } } : {}),
     };
 
     try {

@@ -759,3 +759,66 @@ html, body {
 .btn-group {
   animation: fadeInUp 1s ease 0.9s both;
 }
+
+/* ================================================
+   AR DOM Overlay（WebXR 模式下疊加的 UI）
+   ================================================ */
+
+/* 全螢幕容器：pointer-events:none 讓點擊穿透到 WebXR canvas */
+#ar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 32px);
+}
+
+/* 頂部提示條 */
+.ar-hint-bar {
+  margin-top: 20px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  border-radius: 999px;
+  padding: 10px 24px;
+  font-size: 15px;
+  color: #e8d5a3;
+  letter-spacing: 0.08em;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* 退出 AR 按鈕：固定置底，最大觸控面積 */
+.btn-exit-ar {
+  pointer-events: auto;           /* 允許點擊此按鈕 */
+  margin-bottom: 16px;
+  min-width: 160px;
+  padding: 16px 36px;
+  font-family: var(--font-accent);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #fff;
+  background: rgba(180, 30, 30, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 80, 80, 0.6);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(255, 60, 60, 0.4), 0 4px 24px rgba(0, 0, 0, 0.5);
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-exit-ar:hover,
+.btn-exit-ar:active {
+  background: rgba(220, 50, 50, 0.9);
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(255, 60, 60, 0.6), 0 4px 28px rgba(0, 0, 0, 0.6);
+}

@@ -264,7 +264,13 @@ const App = (() => {
       const badge = document.getElementById('engine-badge');
       badge.textContent = 'Three.js · AR';
 
-      showHint('AR 抽卡 — 點擊螢幕 / 捏合手指 / 按 Trigger 皆可抓取');
+      showHint('AR 抽卡 — 點擊螢幕 / 捏合手指 / 按 Trigger 皆可翻牌');
+
+      // 顯示 AR DOM Overlay（退出按鈕 + 提示）
+      const arOverlay = document.getElementById('ar-overlay');
+      const btnExitAR = document.getElementById('btn-exit-ar');
+      if (arOverlay) arOverlay.style.display = 'flex';
+      if (btnExitAR) btnExitAR.onclick = () => SceneManager.stopAR();
 
       // session 結束時恢復普通模式
       session.addEventListener('end', () => {
@@ -273,6 +279,7 @@ const App = (() => {
         arPointedCardIndex = -1;
         CardManager.setARMode(false, null);
         CardManager.setGroupPosition(0, 0, 0);
+        if (arOverlay) arOverlay.style.display = 'none';
         animate();
         showHint('已退出 AR 模式');
       });
@@ -440,15 +447,14 @@ const App = (() => {
     }
   }
 
-  /** AR 模式下抓取指定卡片（統一入口） */
+  /** AR 模式下抓取指定卡片（原地翻轉，不移動位置） */
   function _grabARCard(cardIdx) {
     if (CardManager.getIsAnimating()) return;
-    // 傳入 camera，讓卡片飛到攝影機前方（AR 模式必要）
-    CardManager.grabCard(cardIdx, scene, (fortuneData) => {
+    CardManager.grabCardAR(cardIdx, scene, (fortuneData) => {
       arPointedCardIndex = -1;
       showResult(fortuneData);
       setState(STATE.RESULT);
-    }, camera);
+    });
   }
 
   // ========== 普通渲染循環 ==========
