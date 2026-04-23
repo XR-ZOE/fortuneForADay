@@ -223,6 +223,107 @@ html, body {
   box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
 }
 
+/* AR 按鈕 — 裝置不支援時變暗 */
+.btn-ar[data-ar-unsupported="true"] {
+  opacity: 0.55;
+  filter: grayscale(30%);
+}
+
+.btn-ar[data-ar-unsupported="true"]::after {
+  content: '裝置不支援';
+  background: #555;
+}
+
+/* ---- AR 不支援提示 Modal ---- */
+#ar-unsupported-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 26, 0.75);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#ar-unsupported-modal.visible {
+  display: flex;
+  opacity: 1;
+}
+
+.ar-modal-content {
+  width: min(420px, 90vw);
+  padding: 2.5em 2em;
+  background: rgba(15, 10, 35, 0.9);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  text-align: center;
+  animation: fadeInUp 0.4s ease;
+}
+
+.ar-modal-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5em;
+}
+
+.ar-modal-content h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--purple);
+  margin-bottom: 0.8em;
+  letter-spacing: 0.05em;
+}
+
+.ar-modal-divider {
+  width: 60px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--purple), transparent);
+  margin: 0 auto 1.2em;
+}
+
+.ar-modal-content p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.8em;
+  line-height: 1.7;
+}
+
+.ar-modal-content ul {
+  list-style: none;
+  text-align: left;
+  margin: 0 auto 1.2em;
+  width: fit-content;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  line-height: 2;
+}
+
+.ar-modal-hint {
+  font-size: 0.8rem !important;
+  color: rgba(160, 148, 128, 0.6) !important;
+}
+
+#ar-modal-close {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--purple);
+  background: transparent;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 50px;
+  padding: 0.7em 2.2em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 0.5em;
+}
+
+#ar-modal-close:hover {
+  background: rgba(139, 92, 246, 0.1);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.3);
+}
+
 /* ---- Welcome Decoration ---- */
 .welcome-deco {
   position: absolute;

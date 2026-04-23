@@ -1,13 +1,13 @@
 /**
  * main.js — 主控制器，協調所有模組（引擎無關）
  *
- * 根據使用者在 Welcome Screen 的選擇動態載入 Three.js 或 Babylon.js，
- * 然後透過相同的全域模組介面 (SceneManager / CardManager / ParticleSystem / HandTracker)
- * 執行抽卡流程。支援一般模式和 WebXR AR 模式。
+ * 支援三種模式：
+ *  1. 手部追蹤 (MediaPipe) — 使用網頁攝影機
+ *  2. 滑鼠模式 — 點擊抓取
+ *  3. WebXR AR 模式 — 真實世界背景 + XR 手部手勢抓取
  */
 
 const App = (() => {
-  // 狀態
   const STATE = {
     LOADING: 'loading',
     WELCOME: 'welcome',
@@ -23,6 +23,9 @@ const App = (() => {
   let currentEngine = 'threejs';
   let isARMode = false;
 
+  // AR 手勢狀態
+  let arWasPinching = { left: false, right: false };
+
   // ========== 動態腳本載入 ==========
 
   function loadScript(src) {
@@ -35,9 +38,6 @@ const App = (() => {
     });
   }
 
-  /**
-   * 載入選定的 3D 引擎及其模組
-   */
   async function loadEngine(engineName) {
     if (engineName === 'threejs') {
       await loadScript('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js');
@@ -56,55 +56,47 @@ const App = (() => {
 
   // ========== 初始化 ==========
 
-  /**
-   * 頁面載入後，只顯示 Welcome Screen（不載入 3D 引擎）
-   */
   function init() {
     setState(STATE.WELCOME);
     setupEvents();
-    checkARSupport();
+    setupARButton(); // AR 按鈕永遠顯示，點擊後才檢查支援
   }
 
   /**
-   * 檢查 AR 支援並顯示/隱藏 AR 按鈕
+   * AR 按鈕永遠顯示，但如果裝置不支援則點擊後顯示說明
    */
-  async function checkARSupport() {
+  async function setupARButton() {
     const arBtn = document.getElementById('btn-start-ar');
-    if (navigator.xr) {
-      try {
-        const supported = await navigator.xr.isSessionSupported('immersive-ar');
-        if (supported) {
-          arBtn.style.display = '';
-        }
-      } catch {
-        // 不支援 AR，按鈕保持隱藏
-      }
+    arBtn.style.display = ''; // 永遠顯示
+
+    // 檢查是否支援，用 badge 提示
+    const supported = await checkARSupport();
+    if (!supported) {
+      // 不支援時加上不可用標記，but 仍然可以點擊（會顯示說明）
+      arBtn.setAttribute('data-ar-unsupported', 'true');
+      arBtn.title = '此裝置不支援 WebXR AR\n（需要 Meta Quest 或支援 ARCore 的 Android）';
     }
   }
 
-  /**
-   * 初始化 3D 引擎（在使用者選擇後呼叫）
-   */
+  async function checkARSupport() {
+    if (!navigator.xr) return false;
+    try {
+      return await navigator.xr.isSessionSupported('immersive-ar');
+    } catch {
+      return false;
+    }
+  }
+
   function initEngine() {
     startTime = performance.now();
-
     const sceneData = SceneManager.init(document.getElementById('canvas-container'));
     scene = sceneData.scene;
     camera = sceneData.camera;
-
-    // 建立粒子星空
     ParticleSystem.createStarField(scene);
-
-    // 建立手部游標
     HandTracker.createHandCursor(scene);
-
-    // 開始渲染循環
     animate();
   }
 
-  /**
-   * 引擎無關的時間計算
-   */
   function getElapsedTime() {
     return (performance.now() - startTime) / 1000;
   }
@@ -112,44 +104,45 @@ const App = (() => {
   // ========== UI 事件 ==========
 
   function setupEvents() {
-    // 啟動按鈕 — 使用攝影機
     document.getElementById('btn-start-camera').addEventListener('click', async () => {
-      const ok = await loadAndInitEngine();
-      if (!ok) return;
+      const ok = await loadAndInitEngine(); if (!ok) return;
       await startWithCamera();
     });
 
-    // 啟動按鈕 — 使用滑鼠
     document.getElementById('btn-start-mouse').addEventListener('click', async () => {
-      const ok = await loadAndInitEngine();
-      if (!ok) return;
+      const ok = await loadAndInitEngine(); if (!ok) return;
       startWithMouse();
     });
 
-    // 啟動按鈕 — AR 模式
     document.getElementById('btn-start-ar').addEventListener('click', async () => {
-      const ok = await loadAndInitEngine();
-      if (!ok) return;
+      // 先檢查支援
+      const supported = await checkARSupport();
+      if (!supported) {
+        showARUnsupportedModal();
+        return;
+      }
+      // 強制使用 Three.js（AR 目前只實作 Three.js 版）
+      const engineSwitch = document.getElementById('engine-switch');
+      if (engineSwitch.checked) {
+        engineSwitch.checked = false;
+        engineSwitch.dispatchEvent(new Event('change'));
+      }
+      const ok = await loadAndInitEngine(); if (!ok) return;
       await startWithAR();
     });
 
-    // 再抽一次按鈕
     document.getElementById('btn-retry').addEventListener('click', () => {
       hideResult();
       CardManager.resetCards(scene);
       setState(STATE.DRAWING);
     });
 
-    // 引擎切換 Toggle — UI 反饋
     const toggle = document.getElementById('engine-switch');
     const labels = document.querySelectorAll('.engine-label');
-
     toggle.addEventListener('change', () => {
       labels[0].classList.toggle('active', !toggle.checked);
       labels[1].classList.toggle('active', toggle.checked);
     });
-
-    // 點擊 Label 也可切換
     labels.forEach((label, idx) => {
       label.addEventListener('click', () => {
         toggle.checked = idx === 1;
@@ -158,15 +151,10 @@ const App = (() => {
     });
   }
 
-  /**
-   * 載入並初始化引擎（共用流程）
-   */
   async function loadAndInitEngine() {
     currentEngine = document.getElementById('engine-switch').checked ? 'babylon' : 'threejs';
     const engineLabel = currentEngine === 'threejs' ? 'Three.js' : 'Babylon.js';
-
     showLoadingOverlay('正在載入 ' + engineLabel + ' 引擎...');
-
     try {
       await loadEngine(currentEngine);
     } catch (err) {
@@ -174,49 +162,64 @@ const App = (() => {
       showLoadingOverlay('引擎載入失敗，請重新整理頁面');
       return false;
     }
-
     initEngine();
-
-    // 顯示引擎 Badge
     const badge = document.getElementById('engine-badge');
     badge.textContent = engineLabel;
     badge.classList.add('visible');
-
     return true;
+  }
+
+  // ========== 不支援 AR 提示 ==========
+
+  function showARUnsupportedModal() {
+    // 建立一個簡單的提示 overlay
+    let modal = document.getElementById('ar-unsupported-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'ar-unsupported-modal';
+      modal.innerHTML = `
+        <div class="ar-modal-content">
+          <div class="ar-modal-icon">📱</div>
+          <h3>AR 模式需要相容裝置</h3>
+          <div class="ar-modal-divider"></div>
+          <p>WebXR AR + 手部追蹤目前支援：</p>
+          <ul>
+            <li>✅ <strong>Meta Quest 2 / 3 / Pro</strong>（手部追蹤最完整）</li>
+            <li>✅ <strong>Android Chrome</strong>（需 ARCore + WebXR flags）</li>
+            <li>❌ iPhone / Safari（尚不支援）</li>
+            <li>❌ 桌機瀏覽器</li>
+          </ul>
+          <p class="ar-modal-hint">請在支援的裝置上開啟此頁面，AR 按鈕將自動啟用。</p>
+          <button id="ar-modal-close">我知道了</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById('ar-modal-close').addEventListener('click', () => {
+        modal.classList.remove('visible');
+      });
+    }
+    modal.classList.add('visible');
   }
 
   // ========== 模式啟動 ==========
 
-  /**
-   * 使用攝影機模式啟動
-   */
   async function startWithCamera() {
     showLoadingOverlay('正在啟動攝影機與手部追蹤...');
-
     const handReady = await HandTracker.init();
     if (!handReady) {
       showLoadingOverlay('手部追蹤初始化失敗，將使用滑鼠模式');
-      await delay(1500);
-      startWithMouse();
-      return;
+      await delay(1500); startWithMouse(); return;
     }
-
     const cameraReady = await HandTracker.startCamera();
     if (!cameraReady) {
       showLoadingOverlay('攝影機啟動失敗，將使用滑鼠模式');
-      await delay(1500);
-      startWithMouse();
-      return;
+      await delay(1500); startWithMouse(); return;
     }
-
     useCamera = true;
     hideLoadingOverlay();
     beginDrawing();
   }
 
-  /**
-   * 使用滑鼠模式啟動
-   */
   function startWithMouse() {
     useCamera = false;
     HandTracker.setupMouseFallback(camera);
@@ -225,73 +228,122 @@ const App = (() => {
   }
 
   /**
-   * 使用 AR 模式啟動
+   * AR 模式啟動
+   * - 進入 WebXR immersive-ar session
+   * - 卡片放置在使用者前方
+   * - 使用 XRFrame hand pose 偵測 pinch 手勢
    */
   async function startWithAR() {
     showLoadingOverlay('正在進入 AR 模式...');
     isARMode = true;
 
     try {
-      await SceneManager.startAR();
+      const session = await SceneManager.startAR();
 
-      // 停止普通 rAF 渲染，使用 XR 的 setAnimationLoop
-      if (animFrameId) {
-        cancelAnimationFrame(animFrameId);
-        animFrameId = null;
-      }
+      // 停止普通 rAF
+      if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
 
-      // AR 渲染循環
+      hideLoadingOverlay();
+      beginDrawingAR();
+
+      // AR 渲染循環 — 用 setAnimationLoop 而非 rAF
       SceneManager.setARAnimationLoop((timestamp, frame) => {
         const elapsed = getElapsedTime();
 
-        // XR 手部追蹤偵測（如果有）
-        if (HandTracker.detectXR) {
-          HandTracker.detectXR(frame);
-        }
+        // XR 手部手勢偵測
+        if (frame) detectARHandGesture(frame);
 
-        // 卡片軌道旋轉
         CardManager.updateOrbit(elapsed);
-
-        // 粒子更新
         ParticleSystem.updateStarField(elapsed);
         ParticleSystem.updateBurst();
-
-        // 渲染
         SceneManager.render();
       });
 
-      hideLoadingOverlay();
-      beginDrawing();
-
-      // AR 提示
-      showHint('在真實場景中尋找卡片，伸手觸碰抓取');
-
       // 更新 badge
       const badge = document.getElementById('engine-badge');
-      badge.textContent = badge.textContent + ' · AR';
+      badge.textContent = 'Three.js · AR';
+
+      showHint('在你面前找到懸浮的命運之卡 — 用拇指和食指捏合抓取');
+
+      // session 結束時恢復普通模式
+      session.addEventListener('end', () => {
+        isARMode = false;
+        arWasPinching = { left: false, right: false };
+        // 恢復普通 rAF
+        animate();
+        showHint('已退出 AR 模式');
+      });
 
     } catch (err) {
       console.error('AR 啟動失敗:', err);
       isARMode = false;
-      showLoadingOverlay('AR 模式啟動失敗：' + err.message);
-      await delay(2000);
-
-      // fallback 回滑鼠模式
+      showLoadingOverlay('AR 啟動失敗：' + err.message);
+      await delay(2500);
       startWithMouse();
     }
   }
 
   /**
-   * 開始抽卡
+   * AR 模式下的開始抽卡（不使用 MediaPipe HandTracker）
    */
+  function beginDrawingAR() {
+    hideWelcome();
+
+    // AR 模式下卡片放在使用者前方 1.5m，稍微偏下（腰部高度）
+    CardManager.createCards(scene);
+
+    // AR 模式下不用 HandTracker 的 onMove/onGrab（改用 XRFrame 手部追蹤）
+    // 但仍然需要設定 callback 供 detectARHandGesture 呼叫
+    HandTracker.onMove(() => {}); // AR 模式暫時不做 hover
+    HandTracker.onGrab((pos) => {
+      if (CardManager.getIsAnimating()) return;
+      const closest = CardManager.findClosestCard(pos, 1.2);
+      if (closest) {
+        CardManager.grabCard(closest.index, scene, (fortuneData) => {
+          showResult(fortuneData);
+          setState(STATE.RESULT);
+        });
+      }
+    });
+
+    setState(STATE.DRAWING);
+  }
+
+  /**
+   * 偵測 AR 模式下的 XR 手部 pinch 手勢
+   * 呼叫 HandTracker.onGrab 的 callback
+   */
+  function detectARHandGesture(frame) {
+    // 檢查兩隻手
+    for (const handedness of ['right', 'left']) {
+      const handData = SceneManager.getHandPinchPosition(frame, handedness);
+      if (!handData) {
+        arWasPinching[handedness] = false;
+        continue;
+      }
+
+      const { position, isPinching } = handData;
+      const wasP = arWasPinching[handedness];
+
+      // 僅在捏合「開始」那一刻觸發（上一幀沒在捏，這幀捏了）
+      if (!wasP && isPinching) {
+        // 呼叫 grab callback
+        const grabCb = HandTracker._getGrabCallback ? HandTracker._getGrabCallback() : null;
+        if (grabCb) grabCb(position);
+      }
+
+      arWasPinching[handedness] = isPinching;
+    }
+  }
+
+  // ========== 普通渲染循環 ==========
+
   function beginDrawing() {
     hideWelcome();
     CardManager.createCards(scene);
 
-    // 設定手部事件
     HandTracker.onMove((pos) => {
       const closest = CardManager.findClosestCard(pos, 2.0);
-      // 重置所有卡片
       CardManager.getCards().forEach((_, i) => CardManager.setHover(i, 0));
       if (closest) {
         const intensity = 1 - (closest.distance / 2.0);
@@ -311,32 +363,16 @@ const App = (() => {
     });
 
     setState(STATE.DRAWING);
-
-    // 顯示操作提示
-    if (!isARMode) {
-      showHint(useCamera ? '用手靠近卡片，捏合手指抓取' : '移動滑鼠靠近卡片，點擊抓取');
-    }
+    showHint(useCamera ? '用手靠近卡片，捏合手指抓取' : '移動滑鼠靠近卡片，點擊抓取');
   }
-
-  // ========== 渲染循環 ==========
 
   function animate() {
     animFrameId = requestAnimationFrame(animate);
     const elapsed = getElapsedTime();
-
-    // 手部追蹤偵測
-    if (useCamera) {
-      HandTracker.detect();
-    }
-
-    // 卡片軌道旋轉
+    if (useCamera) HandTracker.detect();
     CardManager.updateOrbit(elapsed);
-
-    // 粒子更新
     ParticleSystem.updateStarField(elapsed);
     ParticleSystem.updateBurst();
-
-    // 渲染
     SceneManager.render();
   }
 
@@ -356,7 +392,6 @@ const App = (() => {
   function showResult(fortuneData) {
     const el = document.getElementById('result-overlay');
     el.style.display = 'flex';
-
     document.getElementById('result-weather-icon').textContent = fortuneData.weather.icon;
     document.getElementById('result-weather-name').textContent = fortuneData.weather.name;
     document.getElementById('result-weather-desc').textContent = fortuneData.weather.desc;
@@ -365,10 +400,7 @@ const App = (() => {
     document.getElementById('result-fortune-message').textContent = fortuneData.fortune.message;
     document.getElementById('result-color-swatch').style.backgroundColor = fortuneData.luckyColor.hex;
     document.getElementById('result-color-name').textContent = fortuneData.luckyColor.name;
-
-    requestAnimationFrame(() => {
-      el.classList.add('visible');
-    });
+    requestAnimationFrame(() => { el.classList.add('visible'); });
   }
 
   function hideResult() {
@@ -394,15 +426,11 @@ const App = (() => {
     const el = document.getElementById('hint-bar');
     el.textContent = text;
     el.classList.add('visible');
-    setTimeout(() => { el.classList.remove('visible'); }, 5000);
+    setTimeout(() => { el.classList.remove('visible'); }, 6000);
   }
 
-  function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  // 頁面載入即初始化
   window.addEventListener('DOMContentLoaded', init);
-
   return { init };
 })();

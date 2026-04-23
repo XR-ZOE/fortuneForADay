@@ -300,10 +300,12 @@ const HandTracker = (() => {
   function getIsGrabbing() { return isGrabbing; }
   function getHandVisible() { return handVisible; }
   function getIsRunning() { return isRunning; }
+  function _getGrabCallback() { return onGrabCallback; }
 
   return {
     init, startCamera, createHandCursor, detect,
     setupMouseFallback, onGrab, onMove,
     getHandPosition, getIsGrabbing, getHandVisible, getIsRunning,
+    _getGrabCallback,
   };
 })();
