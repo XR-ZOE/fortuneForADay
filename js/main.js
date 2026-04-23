@@ -269,7 +269,8 @@ const App = (() => {
       session.addEventListener('end', () => {
         isARMode = false;
         arWasPinching = { left: false, right: false };
-        // 恢復普通 rAF
+        CardManager.setARMode(false, null); // 恢復普通軌道
+        CardManager.setGroupPosition(0, 0, 0);
         animate();
         showHint('已退出 AR 模式');
       });
@@ -289,6 +290,12 @@ const App = (() => {
   function beginDrawingAR() {
     hideWelcome();
     CardManager.createCards(scene);
+
+    // AR 模式關鍵設定：
+    // 1. 啟用 AR 軌道（小半徑 1m，動態朝向攝影機）
+    // 2. 把卡片群組移到使用者「前方 2m、胸部高度 1.3m」
+    CardManager.setARMode(true, camera);
+    CardManager.setGroupPosition(0, 1.3, -2); // local-floor: Y=0 是地板，-Z 是前方
 
     HandTracker.onMove(() => {});
     HandTracker.onGrab((pos) => {

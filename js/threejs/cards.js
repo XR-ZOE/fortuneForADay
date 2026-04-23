@@ -3,16 +3,22 @@
  */
 
 const CardManager = (() => {
-  const CARD_WIDTH = 1.6;
+  const CARD_WIDTH  = 1.6;
   const CARD_HEIGHT = 2.4;
-  const CARD_COUNT = 5;
-  const ORBIT_RADIUS = 3.2;
+  const CARD_COUNT  = 5;
+  const ORBIT_RADIUS_NORMAL = 3.2;  // 普通模式軌道半徑
+  const ORBIT_RADIUS_AR     = 1.0;  // AR 模式軌道半徑（緊縮，卡片近一點）
+  const ORBIT_SPEED_NORMAL  = 0.3;
+  const ORBIT_SPEED_AR      = 0.18; // AR 模式轉慢一點
 
+  let ORBIT_RADIUS = ORBIT_RADIUS_NORMAL;
   let cards = [];
   let cardGroup = null;
   let selectedCard = null;
   let isAnimating = false;
-  let orbitSpeed = 0.3;
+  let orbitSpeed = ORBIT_SPEED_NORMAL;
+  let isARMode = false;
+  let arCamera = null; // AR 模式下引用攝影機做動態朝向
 
   /**
    * 用 Canvas 2D 繪製卡片背面紋路（加亮版）
@@ -422,12 +428,25 @@ const CardManager = (() => {
       if (card._isRevealed) return;
       const angle = card._orbitAngle + time * orbitSpeed;
       card.position.x = Math.cos(angle) * ORBIT_RADIUS;
-      card.position.z = Math.sin(angle) * ORBIT_RADIUS * 0.4 + 1.5;
-      card.position.y = Math.sin(angle * 2 + i) * 0.4;
+      card.position.z = Math.sin(angle) * ORBIT_RADIUS * 0.4;
+      card.position.y = Math.sin(angle * 2 + i) * 0.15; // AR 模式下嶮擺減小
 
-      // 始終讓背面朝向攝影機（攝影機在 z=8）
-      const dx = -card.position.x;        // camera.x(0) - card.x
-      const dz = 8 - card.position.z;     // camera.z(8) - card.z
+      // 始終讓背面朝向攝影機
+      // AR 模式: 利用即時攝影機位置（XR 每垃更新）、普通模式: 國定 z=8
+      let camX, camZ;
+      if (isARMode && arCamera) {
+        // 轉換為卡片局部座標（因為 cardGroup 已設位置）
+        const worldCamPos = arCamera.position.clone();
+        const localCamPos = cardGroup.worldToLocal(worldCamPos);
+        camX = localCamPos.x;
+        camZ = localCamPos.z;
+      } else {
+        camX = 0;
+        camZ = 8; // 普通模式攝影機在 z=8
+      }
+
+      const dx = camX - card.position.x;
+      const dz = camZ - card.position.z;
       const angleToCamera = Math.atan2(dx, dz);
       card.rotation.y = Math.PI + angleToCamera;
 
@@ -560,8 +579,22 @@ const CardManager = (() => {
   function getIsAnimating() { return isAnimating; }
   function getCards() { return cards; }
 
+  /** 設定卡片組的世界座標中心（AR 模式下調整到用戶前方） */
+  function setGroupPosition(x, y, z) {
+    if (cardGroup) cardGroup.position.set(x, y, z);
+  }
+
+  /** 啟用/關閉 AR 模式（調整軌道半徑、高度、攝影機參照） */
+  function setARMode(enabled, camera) {
+    isARMode = enabled;
+    arCamera = camera || null;
+    ORBIT_RADIUS = enabled ? ORBIT_RADIUS_AR : ORBIT_RADIUS_NORMAL;
+    orbitSpeed   = enabled ? ORBIT_SPEED_AR  : ORBIT_SPEED_NORMAL;
+  }
+
   return {
     createCards, updateOrbit, setHover, grabCard,
     resetCards, findClosestCard, getIsAnimating, getCards,
+    setGroupPosition, setARMode,
   };
 })();
