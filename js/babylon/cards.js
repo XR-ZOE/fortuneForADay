@@ -351,17 +351,19 @@ const CardManager = (() => {
       backMaterial.metallic = 0.2;
       backMaterial.backFaceCulling = true;
 
-      // 雙面卡片用兩個平面
+      // 雙面卡片用兩個平面（與 Three.js 相同設定）
       const frontMesh = BABYLON.MeshBuilder.CreatePlane('front_' + i, {
         width: CARD_WIDTH, height: CARD_HEIGHT,
       }, scene);
       frontMesh.material = frontMaterial;
+      frontMesh.position.z = -0.003; // 稍微居後防止 Z-fighting
 
       const backMesh = BABYLON.MeshBuilder.CreatePlane('back_' + i, {
         width: CARD_WIDTH, height: CARD_HEIGHT,
       }, scene);
       backMesh.material = backMaterial;
-      backMesh.rotation.y = Math.PI; // 背面旋轉 180°
+      backMesh.rotation.y = Math.PI; // 背面 mesh 旋轉 180°
+      backMesh.position.z = 0.003; // 稍微居前
 
       // 發光光暈
       const glowMesh = BABYLON.MeshBuilder.CreatePlane('glow_' + i, {
@@ -383,7 +385,7 @@ const CardManager = (() => {
       backMesh.parent = cardObj;
       glowMesh.parent = cardObj;
 
-      // 初始旋轉：顯示背面
+      // 初始旋轉：讓背面朝向攝影機
       cardObj.rotation.y = Math.PI;
 
       const angle = (i / CARD_COUNT) * Math.PI * 2;
@@ -413,8 +415,12 @@ const CardManager = (() => {
       card.position.z = Math.sin(angle) * ORBIT_RADIUS * 0.4 + 1.5;
       card.position.y = Math.sin(angle * 2 + i) * 0.4;
 
-      // 卡片始終面向攝影機方向（但顯示背面）
-      card.rotation.y = Math.PI - angle;
+      // 始終讓背面朝向攝影機（攝影機在 z=8）
+      // cardObj 初始旋轉已是 PI，所以這裡直接用 angleToCamera
+      const dx = card.position.x;
+      const dz = 8 - card.position.z;
+      const angleToCamera = Math.atan2(dx, dz);
+      card.rotation.y = angleToCamera;
 
       // 自轉微擺
       card.rotation.z = Math.sin(time * 0.5 + i * 1.2) * 0.05;
@@ -464,7 +470,7 @@ const CardManager = (() => {
     });
 
     gsap.to(card.rotation, {
-      y: 0,
+      y: Math.PI, // 旋轉到正面
       z: 0,
       duration: 1.0,
       ease: 'power3.inOut',

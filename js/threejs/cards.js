@@ -422,11 +422,14 @@ const CardManager = (() => {
       if (card._isRevealed) return;
       const angle = card._orbitAngle + time * orbitSpeed;
       card.position.x = Math.cos(angle) * ORBIT_RADIUS;
-      card.position.z = Math.sin(angle) * ORBIT_RADIUS * 0.4 + 1.5; // 收窄 Z 深度，讓卡片更靠前
+      card.position.z = Math.sin(angle) * ORBIT_RADIUS * 0.4 + 1.5;
       card.position.y = Math.sin(angle * 2 + i) * 0.4;
 
-      // 卡片始終面向攝影機方向（但顯示背面）
-      card.rotation.y = Math.PI - angle;
+      // 始終讓背面朝向攝影機（攝影機在 z=8）
+      const dx = -card.position.x;        // camera.x(0) - card.x
+      const dz = 8 - card.position.z;     // camera.z(8) - card.z
+      const angleToCamera = Math.atan2(dx, dz);
+      card.rotation.y = Math.PI + angleToCamera;
 
       // 自轉微擺
       card.rotation.z = Math.sin(time * 0.5 + i * 1.2) * 0.05;
