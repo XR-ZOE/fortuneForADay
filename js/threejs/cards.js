@@ -475,8 +475,12 @@ const CardManager = (() => {
 
   /**
    * 抓取卡片：飛向中央並翻轉
+   * @param {number} cardIndex
+   * @param {THREE.Scene} scene
+   * @param {Function} onComplete
+   * @param {THREE.Camera|null} arCamera - AR 模式下傳入攝影機，讓卡片飛到視野前方
    */
-  function grabCard(cardIndex, scene, onComplete) {
+  function grabCard(cardIndex, scene, onComplete, arCamera) {
     if (isAnimating || cardIndex < 0 || cardIndex >= cards.length) return;
     const card = cards[cardIndex];
     if (card._isRevealed) return;
@@ -486,13 +490,26 @@ const CardManager = (() => {
     card._isRevealed = true;
 
     // 爆發粒子
-    ParticleSystem.createBurst(scene, card.position.clone(), card._fortuneData.fortune.color);
+    const cardWorldPos = new THREE.Vector3();
+    card.getWorldPosition(cardWorldPos);
+    ParticleSystem.createBurst(scene, cardWorldPos, card._fortuneData.fortune.color);
 
-    // GSAP 動畫：飛到中央
+    // 目標位置：AR 模式飛到攝影機前方 1.2m，普通模式飛到固定中央
+    let targetX = 0, targetY = 0.2, targetZ = 3;
+    if (arCamera) {
+      const forward = new THREE.Vector3();
+      arCamera.getWorldDirection(forward);
+      const target = arCamera.position.clone().add(forward.multiplyScalar(1.2));
+      targetX = target.x;
+      targetY = target.y;
+      targetZ = target.z;
+    }
+
+    // GSAP 動畫：飛到目標位置
     gsap.to(card.position, {
-      x: 0,
-      y: 0.2,
-      z: 3,
+      x: targetX,
+      y: targetY,
+      z: targetZ,
       duration: 0.8,
       ease: 'power3.inOut',
     });

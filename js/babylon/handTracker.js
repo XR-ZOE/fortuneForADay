@@ -207,8 +207,8 @@ const HandTracker = (() => {
 
       const palm = landmarks[9]; // MIDDLE_FINGER_MCP
 
-      // 映射到 Babylon.js 空間（使用 rightHandedSystem，座標與 Three.js 一致）
-      const mappedX = (palm.x - 0.5) * 12;
+      // 映射到 Babylon.js 空間（自拍鏡頭鏡像翻轉 X）
+      const mappedX = -(palm.x - 0.5) * 12;
       const mappedY = -(palm.y - 0.5) * 8;
       const mappedZ = 3 - palm.z * 5;
 

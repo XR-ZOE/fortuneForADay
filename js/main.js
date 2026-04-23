@@ -443,11 +443,12 @@ const App = (() => {
   /** AR 模式下抓取指定卡片（統一入口） */
   function _grabARCard(cardIdx) {
     if (CardManager.getIsAnimating()) return;
+    // 傳入 camera，讓卡片飛到攝影機前方（AR 模式必要）
     CardManager.grabCard(cardIdx, scene, (fortuneData) => {
       arPointedCardIndex = -1;
       showResult(fortuneData);
       setState(STATE.RESULT);
-    });
+    }, camera);
   }
 
   // ========== 普通渲染循環 ==========
