@@ -1,10 +1,12 @@
 /**
- * scene.js — Three.js 場景、攝影機、燈光、渲染器
+ * scene.js — Three.js 場景、攝影機、燈光、渲染器 + WebXR AR
  */
 
 const SceneManager = (() => {
   let scene, camera, renderer;
   let width, height;
+  let isAR = false;
+  let xrSession = null;
 
   function init(container) {
     width = window.innerWidth;
@@ -23,7 +25,7 @@ const SceneManager = (() => {
     // 渲染器
     renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: false,
+      alpha: true,  // AR 需要透明背景
       powerPreference: 'high-performance',
     });
     renderer.setSize(width, height);
@@ -67,6 +69,86 @@ const SceneManager = (() => {
     scene.add(bottomLight);
   }
 
+  // ========== WebXR AR ==========
+
+  /**
+   * 檢查是否支援 WebXR AR
+   */
+  async function isARSupported() {
+    if (!navigator.xr) return false;
+    try {
+      return await navigator.xr.isSessionSupported('immersive-ar');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 啟動 AR session
+   */
+  async function startAR() {
+    if (!navigator.xr) throw new Error('WebXR 不支援');
+
+    // 開啟 XR
+    renderer.xr.enabled = true;
+
+    // AR 下背景透明（看到攝影機畫面）
+    scene.background = null;
+    scene.fog = null;
+
+    // 請求 session — 嘗試使用 hand-tracking，不可用則 fallback
+    const sessionInit = {
+      requiredFeatures: ['local-floor'],
+      optionalFeatures: ['hand-tracking'],
+    };
+
+    try {
+      xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
+      renderer.xr.setReferenceSpaceType('local-floor');
+      await renderer.xr.setSession(xrSession);
+
+      isAR = true;
+
+      // 攝影機位置在 AR 由 XR 系統控制
+      camera.position.set(0, 0, 0);
+
+      // 監聽 session 結束
+      xrSession.addEventListener('end', () => {
+        isAR = false;
+        xrSession = null;
+        renderer.xr.enabled = false;
+        // 恢復場景背景
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.035);
+        camera.position.set(0, 0, 8);
+        camera.lookAt(0, 0, 0);
+      });
+
+      return xrSession;
+    } catch (err) {
+      renderer.xr.enabled = false;
+      scene.background = new THREE.Color(0x0a0a1a);
+      scene.fog = new THREE.FogExp2(0x0a0a1a, 0.035);
+      throw err;
+    }
+  }
+
+  /**
+   * 設定 AR 模式的渲染循環（使用 setAnimationLoop 取代 rAF）
+   */
+  function setARAnimationLoop(callback) {
+    renderer.setAnimationLoop(callback);
+  }
+
+  /**
+   * 停止 AR session
+   */
+  async function stopAR() {
+    if (xrSession) {
+      await xrSession.end();
+    }
+  }
+
   function onResize() {
     width = window.innerWidth;
     height = window.innerHeight;
@@ -82,6 +164,10 @@ const SceneManager = (() => {
   function getScene() { return scene; }
   function getCamera() { return camera; }
   function getRenderer() { return renderer; }
+  function getIsAR() { return isAR; }
 
-  return { init, render, getScene, getCamera, getRenderer };
+  return {
+    init, render, getScene, getCamera, getRenderer,
+    isARSupported, startAR, stopAR, setARAnimationLoop, getIsAR,
+  };
 })();

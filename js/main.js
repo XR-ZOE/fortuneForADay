@@ -3,7 +3,7 @@
  *
  * 根據使用者在 Welcome Screen 的選擇動態載入 Three.js 或 Babylon.js，
  * 然後透過相同的全域模組介面 (SceneManager / CardManager / ParticleSystem / HandTracker)
- * 執行抽卡流程。
+ * 執行抽卡流程。支援一般模式和 WebXR AR 模式。
  */
 
 const App = (() => {
@@ -21,6 +21,7 @@ const App = (() => {
   let useCamera = false;
   let animFrameId = null;
   let currentEngine = 'threejs';
+  let isARMode = false;
 
   // ========== 動態腳本載入 ==========
 
@@ -61,6 +62,24 @@ const App = (() => {
   function init() {
     setState(STATE.WELCOME);
     setupEvents();
+    checkARSupport();
+  }
+
+  /**
+   * 檢查 AR 支援並顯示/隱藏 AR 按鈕
+   */
+  async function checkARSupport() {
+    const arBtn = document.getElementById('btn-start-ar');
+    if (navigator.xr) {
+      try {
+        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (supported) {
+          arBtn.style.display = '';
+        }
+      } catch {
+        // 不支援 AR，按鈕保持隱藏
+      }
+    }
   }
 
   /**
@@ -105,6 +124,13 @@ const App = (() => {
       const ok = await loadAndInitEngine();
       if (!ok) return;
       startWithMouse();
+    });
+
+    // 啟動按鈕 — AR 模式
+    document.getElementById('btn-start-ar').addEventListener('click', async () => {
+      const ok = await loadAndInitEngine();
+      if (!ok) return;
+      await startWithAR();
     });
 
     // 再抽一次按鈕
@@ -199,6 +225,63 @@ const App = (() => {
   }
 
   /**
+   * 使用 AR 模式啟動
+   */
+  async function startWithAR() {
+    showLoadingOverlay('正在進入 AR 模式...');
+    isARMode = true;
+
+    try {
+      await SceneManager.startAR();
+
+      // 停止普通 rAF 渲染，使用 XR 的 setAnimationLoop
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+
+      // AR 渲染循環
+      SceneManager.setARAnimationLoop((timestamp, frame) => {
+        const elapsed = getElapsedTime();
+
+        // XR 手部追蹤偵測（如果有）
+        if (HandTracker.detectXR) {
+          HandTracker.detectXR(frame);
+        }
+
+        // 卡片軌道旋轉
+        CardManager.updateOrbit(elapsed);
+
+        // 粒子更新
+        ParticleSystem.updateStarField(elapsed);
+        ParticleSystem.updateBurst();
+
+        // 渲染
+        SceneManager.render();
+      });
+
+      hideLoadingOverlay();
+      beginDrawing();
+
+      // AR 提示
+      showHint('在真實場景中尋找卡片，伸手觸碰抓取');
+
+      // 更新 badge
+      const badge = document.getElementById('engine-badge');
+      badge.textContent = badge.textContent + ' · AR';
+
+    } catch (err) {
+      console.error('AR 啟動失敗:', err);
+      isARMode = false;
+      showLoadingOverlay('AR 模式啟動失敗：' + err.message);
+      await delay(2000);
+
+      // fallback 回滑鼠模式
+      startWithMouse();
+    }
+  }
+
+  /**
    * 開始抽卡
    */
   function beginDrawing() {
@@ -230,7 +313,9 @@ const App = (() => {
     setState(STATE.DRAWING);
 
     // 顯示操作提示
-    showHint(useCamera ? '用手靠近卡片，捏合手指抓取' : '移動滑鼠靠近卡片，點擊抓取');
+    if (!isARMode) {
+      showHint(useCamera ? '用手靠近卡片，捏合手指抓取' : '移動滑鼠靠近卡片，點擊抓取');
+    }
   }
 
   // ========== 渲染循環 ==========

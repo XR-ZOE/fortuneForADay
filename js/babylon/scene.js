@@ -1,9 +1,11 @@
 /**
- * scene.js — Babylon.js 場景、攝影機、燈光、渲染引擎
+ * scene.js — Babylon.js 場景、攝影機、燈光、渲染引擎 + WebXR AR
  */
 
 const SceneManager = (() => {
   let engine, scene, camera;
+  let isAR = false;
+  let xrHelper = null;
 
   function init(container) {
     // 建立 Canvas
@@ -87,6 +89,92 @@ const SceneManager = (() => {
     bottomLight.range = 15;
   }
 
+  // ========== WebXR AR ==========
+
+  /**
+   * 檢查是否支援 WebXR AR
+   */
+  async function isARSupported() {
+    if (!navigator.xr) return false;
+    try {
+      return await navigator.xr.isSessionSupported('immersive-ar');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 啟動 AR session
+   */
+  async function startAR() {
+    if (!navigator.xr) throw new Error('WebXR 不支援');
+
+    // AR 背景透明
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+    scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+
+    try {
+      xrHelper = await scene.createDefaultXRExperienceAsync({
+        uiOptions: {
+          sessionMode: 'immersive-ar',
+          referenceSpaceType: 'local-floor',
+        },
+        optionalFeatures: true,
+      });
+
+      // 嘗試啟用手部追蹤
+      try {
+        const handTracking = xrHelper.baseExperience.featuresManager.enableFeature(
+          BABYLON.WebXRFeatureName.HAND_TRACKING,
+          'latest',
+          {
+            xrInput: xrHelper.input,
+          }
+        );
+        console.log('✅ Babylon.js WebXR 手部追蹤已啟用');
+      } catch (e) {
+        console.warn('⚠️ 手部追蹤不可用:', e);
+      }
+
+      isAR = true;
+
+      // 監聽 session 結束
+      xrHelper.baseExperience.onStateChangedObservable.add((state) => {
+        if (state === BABYLON.WebXRState.NOT_IN_XR) {
+          isAR = false;
+          scene.clearColor = new BABYLON.Color4(10 / 255, 10 / 255, 26 / 255, 1);
+          scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+          scene.fogDensity = 0.035;
+          camera.position.set(0, 0, 8);
+          camera.setTarget(BABYLON.Vector3.Zero());
+        }
+      });
+
+      return xrHelper;
+    } catch (err) {
+      scene.clearColor = new BABYLON.Color4(10 / 255, 10 / 255, 26 / 255, 1);
+      scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+      throw err;
+    }
+  }
+
+  /**
+   * 設定 AR 模式的渲染循環（Babylon 使用 runRenderLoop）
+   */
+  function setARAnimationLoop(callback) {
+    engine.stopRenderLoop();
+    engine.runRenderLoop(callback);
+  }
+
+  /**
+   * 停止 AR session
+   */
+  async function stopAR() {
+    if (xrHelper && xrHelper.baseExperience) {
+      await xrHelper.baseExperience.exitXRAsync();
+    }
+  }
+
   function onResize() {
     engine.resize();
   }
@@ -98,6 +186,10 @@ const SceneManager = (() => {
   function getScene() { return scene; }
   function getCamera() { return camera; }
   function getRenderer() { return engine; }
+  function getIsAR() { return isAR; }
 
-  return { init, render, getScene, getCamera, getRenderer };
+  return {
+    init, render, getScene, getCamera, getRenderer,
+    isARSupported, startAR, stopAR, setARAnimationLoop, getIsAR,
+  };
 })();

@@ -53,97 +53,175 @@ const CardManager = (() => {
   // ========== 紋理建立（使用 DynamicTexture）==========
 
   /**
-   * 用 Canvas 2D 繪製卡片背面紋路
+   * 用 Canvas 2D 繪製卡片背面紋路（加亮版）
    */
   function createBackTexture() {
     const dt = new BABYLON.DynamicTexture('backTex_' + _texId++, { width: 512, height: 768 }, _scene, true);
     const ctx = dt.getContext();
 
-    // 深紫背景漸層
+    // ── 背景漸層（更亮的深紫） ──
     const grad = ctx.createLinearGradient(0, 0, 512, 768);
-    grad.addColorStop(0, '#1a0533');
+    grad.addColorStop(0, '#1e0845');
+    grad.addColorStop(0.3, '#3a1a8a');
     grad.addColorStop(0.5, '#2d1b69');
-    grad.addColorStop(1, '#0f0a2e');
+    grad.addColorStop(0.7, '#3a1a8a');
+    grad.addColorStop(1, '#1e0845');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 768);
 
-    // 金色邊框
-    ctx.strokeStyle = '#c9a84c';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(16, 16, 480, 736);
-
-    // 內框
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(32, 32, 448, 704);
-
-    // 中央符文圓圈
-    ctx.save();
-    ctx.translate(256, 384);
-
-    ctx.beginPath();
-    ctx.arc(0, 0, 120, 0, Math.PI * 2);
-    ctx.strokeStyle = '#c9a84c';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(0, 0, 90, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // 星形符文
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      ctx.save();
-      ctx.rotate(angle);
+    // ── 底層星點裝飾 ──
+    for (let i = 0; i < 80; i++) {
+      const sx = Math.random() * 512;
+      const sy = Math.random() * 768;
+      const sr = Math.random() * 1.5 + 0.5;
       ctx.beginPath();
-      ctx.moveTo(0, -100);
-      ctx.lineTo(5, -60);
-      ctx.lineTo(-5, -60);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(201, 168, 76, 0.5)';
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(201, 168, 76, ${Math.random() * 0.4 + 0.1})`;
       ctx.fill();
-      ctx.restore();
     }
 
-    // 中央問號
-    ctx.fillStyle = '#c9a84c';
-    ctx.font = 'bold 72px "Noto Serif TC", serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('？', 0, 0);
+    // ── 金色外邊框 ──
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(12, 12, 488, 744);
 
-    ctx.restore();
+    // ── 金色內邊框 ──
+    ctx.strokeStyle = '#c9a84c';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(28, 28, 456, 712);
 
-    // 四角裝飾
+    // ── 四角裝飾花紋 ──
     const corners = [[48, 48], [464, 48], [48, 720], [464, 720]];
     corners.forEach(([cx, cy]) => {
       ctx.save();
       ctx.translate(cx, cy);
       ctx.beginPath();
-      ctx.arc(0, 0, 15, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
+      ctx.arc(0, 0, 22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.25)';
       ctx.fill();
-      ctx.strokeStyle = '#c9a84c';
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.fillStyle = '#d4af37';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
       ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-18, 0); ctx.lineTo(18, 0);
+      ctx.moveTo(0, -18); ctx.lineTo(0, 18);
       ctx.stroke();
       ctx.restore();
     });
 
-    // 神秘紋路線條
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
-    ctx.lineWidth = 0.5;
+    // ── 中央大符文圓圈 ──
+    ctx.save();
+    ctx.translate(256, 384);
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 150, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 130, 0, Math.PI * 2);
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 100, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(212, 175, 55, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 65, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // ── 12 星形射線 ──
     for (let i = 0; i < 12; i++) {
-      const y = 80 + i * 55;
+      const angle = (i / 12) * Math.PI * 2;
+      ctx.save();
+      ctx.rotate(angle);
       ctx.beginPath();
-      ctx.moveTo(60, y);
-      for (let x = 60; x < 452; x += 2) {
-        ctx.lineTo(x, y + Math.sin(x * 0.05 + i) * 8);
+      ctx.moveTo(0, -65);
+      ctx.lineTo(0, -130);
+      ctx.strokeStyle = 'rgba(212, 175, 55, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -140, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(212, 175, 55, 0.5)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ── 8 個三角形符文 ──
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0, -115);
+      ctx.lineTo(8, -80);
+      ctx.lineTo(-8, -80);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(212, 175, 55, 0.6)';
+      ctx.fill();
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ── 中央問號 ──
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 80px "Noto Serif TC", serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(212, 175, 55, 0.8)';
+    ctx.shadowBlur = 20;
+    ctx.fillText('？', 0, 0);
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+
+    // ── 上下裝飾帶 ──
+    [120, 648].forEach(bandY => {
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.08)';
+      ctx.fillRect(45, bandY, 422, 2);
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.15)';
+      ctx.fillRect(45, bandY - 15, 422, 1);
+      ctx.fillRect(45, bandY + 15, 422, 1);
+    });
+
+    // ── 波紋裝飾線 ──
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.2)';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 8; i++) {
+      const y = 170 + i * 65;
+      if (y > 280 && y < 490) continue;
+      ctx.beginPath();
+      ctx.moveTo(50, y);
+      for (let x = 50; x < 462; x += 2) {
+        ctx.lineTo(x, y + Math.sin(x * 0.04 + i * 0.8) * 6);
       }
       ctx.stroke();
     }
+
+    // ── 上方標題文字 ──
+    ctx.fillStyle = 'rgba(212, 175, 55, 0.7)';
+    ctx.font = '18px "Noto Serif TC", serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✦ 命 運 之 卡 ✦', 256, 80);
+
+    // ── 下方標題文字 ──
+    ctx.fillText('✦ FORTUNE  CARD ✦', 256, 710);
 
     dt.update();
     return dt;
@@ -253,16 +331,22 @@ const CardManager = (() => {
       const fortuneData = FortuneGenerator.generate();
       const frontTexture = createFrontTexture(fortuneData);
 
-      // 正面材質（PBR — 對應 Three.js MeshStandardMaterial）
+      // 正面材質 — 使用 emissiveTexture 讓文字自發光可見
       const frontMaterial = new BABYLON.PBRMaterial('frontMat_' + i, scene);
       frontMaterial.albedoTexture = frontTexture;
+      frontMaterial.emissiveTexture = frontTexture;
+      frontMaterial.emissiveColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+      frontMaterial.emissiveIntensity = 1.0;
       frontMaterial.roughness = 0.3;
       frontMaterial.metallic = 0.1;
       frontMaterial.backFaceCulling = true;
 
-      // 背面材質
+      // 背面材質 — 使用 emissiveTexture 讓圖案自發光
       const backMaterial = new BABYLON.PBRMaterial('backMat_' + i, scene);
       backMaterial.albedoTexture = backTexture;
+      backMaterial.emissiveTexture = backTexture;
+      backMaterial.emissiveColor = new BABYLON.Color3(0.9, 0.9, 0.9);
+      backMaterial.emissiveIntensity = 1.0;
       backMaterial.roughness = 0.3;
       backMaterial.metallic = 0.2;
       backMaterial.backFaceCulling = true;
