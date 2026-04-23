@@ -496,16 +496,20 @@ const CardManager = (() => {
 
     // 目標位置：AR 模式飛到攝影機前方 1.2m，普通模式飛到固定中央
     let targetX = 0, targetY = 0.2, targetZ = 3;
-    if (arCamera) {
+    if (arCamera && cardGroup) {
       const forward = new THREE.Vector3();
       arCamera.getWorldDirection(forward);
-      const target = arCamera.position.clone().add(forward.multiplyScalar(1.2));
-      targetX = target.x;
-      targetY = target.y;
-      targetZ = target.z;
+      // 世界座標：攝影機前方 1.2m
+      const worldTarget = arCamera.position.clone().add(forward.multiplyScalar(1.2));
+      // ⚠️ 必須轉換成 cardGroup 局部座標！
+      // cardGroup 有 position(0,1.3,-2) 和 scale(1/3)，直接用世界座標會飛到看不到的地方
+      const localTarget = cardGroup.worldToLocal(worldTarget);
+      targetX = localTarget.x;
+      targetY = localTarget.y;
+      targetZ = localTarget.z;
     }
 
-    // GSAP 動畫：飛到目標位置
+    // GSAP 動畫：飛到目標位置（局部座標）
     gsap.to(card.position, {
       x: targetX,
       y: targetY,
