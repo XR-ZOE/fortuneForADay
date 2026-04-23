@@ -6,6 +6,9 @@
   <title>神秘運勢抽卡 — 今日你的命運由此揭曉</title>
   <meta name="description" content="透過攝影機手勢追蹤，在 3D 空間中抓取旋轉的神秘運勢卡牌，揭曉今日運勢、明日天氣與幸運顏色。支援 Three.js 與 Babylon.js 雙引擎。">
   <meta name="theme-color" content="#0a0a1a">
+  <!-- 安全性 meta -->
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,7 +57,7 @@
       <button id="btn-start-mouse" class="btn-mystical btn-secondary">
         🖱 使用滑鼠模式
       </button>
-      <button id="btn-start-ar" class="btn-mystical btn-ar" style="display:none">
+      <button id="btn-start-ar" class="btn-mystical btn-ar" style="display:none" aria-label="進入 AR 模式">
         📱 AR 模式 · 懸浮抽卡
       </button>
     </div>
