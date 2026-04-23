@@ -268,7 +268,7 @@ const App = (() => {
 
       // 更新 badge
       const badge = document.getElementById('engine-badge');
-      badge.textContent = 'Three.js · AR';
+      badge.textContent = (currentEngine === 'babylon' ? 'Babylon.js' : 'Three.js') + ' · AR';
 
       showHint('AR 抽卡 — 點擊螢幕 / 捏合手指 / 按 Trigger 皆可翻牌');
 
@@ -306,26 +306,21 @@ const App = (() => {
     hideWelcome();
     CardManager.createCards(scene);
 
-    // AR 模式關鍵設定：
-    // 1. 啟用 AR 軌道（小半徑 1m，動態朝向攝影機）
-    // 2. 把卡片群組移到使用者「前方 2m、胸部高度 1.3m」
-    CardManager.setARMode(true, camera);
-    CardManager.setGroupPosition(0, 1.3, -2); // local-floor: Y=0 是地板，-Z 是前方
+    // 取得 AR 攝影機：
+    // - Three.js：camera 就是 XR 攝影機
+    // - Babylon.js：需用 getXRCamera() 取得 baseExperience.camera
+    const arCam = typeof SceneManager.getXRCamera === 'function'
+      ? SceneManager.getXRCamera()
+      : camera;
 
+    CardManager.setARMode(true, arCam);
+    CardManager.setGroupPosition(0, 1.3, -2);
+
+    // AR 模式不用 HandTracker（改用螢幕點擊）
     HandTracker.onMove(() => {});
-    HandTracker.onGrab((pos) => {
-      if (CardManager.getIsAnimating()) return;
-      // AR 卡片縮小 1/3，加大關益區（world space）至 2.0m
-      const closest = CardManager.findClosestCard(pos, 2.0);
-      if (closest) {
-        CardManager.grabCard(closest.index, scene, (fortuneData) => {
-          showResult(fortuneData);
-          setState(STATE.RESULT);
-        });
-      }
-    });
+    HandTracker.onGrab(() => {});
 
-    // 螢幕點擊 / 觸碰 fallback（手機 AR 或 Emulator 滑鼠點擊）
+    // 螢幕點擊 / 觸碰 → 翻牌
     _setupARTouchAndController();
     setState(STATE.DRAWING);
   }

@@ -15,6 +15,9 @@ const CardManager = (() => {
   let orbitSpeed = 0.3;
   let _scene = null;
   let _texId = 0;
+  let _isARMode = false;
+  let _arCamera = null;    // AR 模式下的摄影機參考
+  let _arFlipState = null; // { card, startY, elapsed, duration, onComplete }
 
   // ========== Canvas 繪圖工具 ==========
 
@@ -403,10 +406,20 @@ const CardManager = (() => {
   }
 
   /**
-   * 更新卡片軌道旋轉
+   * 更新卡片軌道旋轉（AR 模式改用攝影機世界座標計算背面方向）
    */
   function updateOrbit(time) {
     if (!cardGroup || isAnimating) return;
+
+    // 取攝影機局部座標（普通/AR 共用）
+    let camX = 0, camZ = 8;
+    if (_isARMode && _arCamera) {
+      const worldCam = _arCamera.position;
+      const invMat = BABYLON.Matrix.Invert(cardGroup.getWorldMatrix());
+      const localCam = BABYLON.Vector3.TransformCoordinates(worldCam, invMat);
+      camX = localCam.x;
+      camZ = localCam.z;
+    }
 
     cards.forEach((card, i) => {
       if (card._isRevealed) return;
@@ -415,12 +428,11 @@ const CardManager = (() => {
       card.position.z = Math.sin(angle) * ORBIT_RADIUS * 0.4 + 1.5;
       card.position.y = Math.sin(angle * 2 + i) * 0.4;
 
-      // 始終讓背面朝向攝影機（攝影機在 z=8）
-      // cardObj 初始旋轉已是 PI，所以這裡直接用 angleToCamera
-      const dx = card.position.x;
-      const dz = 8 - card.position.z;
+      // 背面朝向攝影機
+      const dx = camX - card.position.x;
+      const dz = camZ - card.position.z;
       const angleToCamera = Math.atan2(dx, dz);
-      card.rotation.y = angleToCamera;
+      card.rotation.y = Math.PI + angleToCamera;
 
       // 自轉微擺
       card.rotation.z = Math.sin(time * 0.5 + i * 1.2) * 0.05;
@@ -446,9 +458,9 @@ const CardManager = (() => {
   }
 
   /**
-   * 抓取卡片：飛向中央並翻轉
+   * AR 模式指定卡片：原地翻轉（手動插値動畫，不依賴 GSAP RAF）
    */
-  function grabCard(cardIndex, scene, onComplete) {
+  function grabCardAR(cardIndex, scene, onComplete) {
     if (isAnimating || cardIndex < 0 || cardIndex >= cards.length) return;
     const card = cards[cardIndex];
     if (card._isRevealed) return;
@@ -457,50 +469,81 @@ const CardManager = (() => {
     selectedCard = card;
     card._isRevealed = true;
 
-    // 爆發粒子
-    ParticleSystem.createBurst(scene, card.position.clone(), card._fortuneData.fortune.color);
+    // 爆發粒子（世界座標）
+    const worldPos = card.getAbsolutePosition();
+    ParticleSystem.createBurst(scene, worldPos, card._fortuneData.fortune.color);
 
-    // GSAP 動畫：飛到中央
-    gsap.to(card.position, {
-      x: 0,
-      y: 0.2,
-      z: 3,
-      duration: 0.8,
-      ease: 'power3.inOut',
-    });
+    // 光暈立即亮起
+    card._glowMat.alpha = 0.8;
 
-    gsap.to(card.rotation, {
-      y: Math.PI, // 旋轉到正面
-      z: 0,
+    // 記錄翻轉起始狀態
+    _arFlipState = {
+      card,
+      startY: card.rotation.y,
+      elapsed: 0,
       duration: 1.0,
-      ease: 'power3.inOut',
-      delay: 0.3,
-      onComplete: () => {
-        isAnimating = false;
-        if (onComplete) onComplete(card._fortuneData);
-      },
-    });
-
-    // 放大卡片（Babylon 使用 scaling 而非 scale）
-    gsap.to(card.scaling, {
-      x: 1.3,
-      y: 1.3,
-      z: 1.3,
-      duration: 0.8,
-      ease: 'power2.out',
-    });
-
-    // 光暈效果
-    gsap.to(card._glowMat, {
-      alpha: 0.6,
-      duration: 0.5,
-    });
-    gsap.to(card._glowMat, {
-      alpha: 0,
-      duration: 0.5,
-      delay: 1.0,
-    });
+      onComplete,
+    };
   }
+
+  /**
+   * 每幀推進 AR 翻轉動畫（由 main.js XR render loop 呼叫）
+   */
+  function updateARFlip(dt) {
+    if (!_arFlipState) return;
+    const s = _arFlipState;
+    s.elapsed += dt;
+    const t = Math.min(s.elapsed / s.duration, 1);
+
+    // easeInOut cubic
+    const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    // Babylon 卡片正面 = rotation.y = Math.PI（與 Three.js 相反）
+    s.card.rotation.y = s.startY + (Math.PI - s.startY) * ease;
+    s.card.rotation.z *= (1 - ease);
+
+    // 放大
+    const sc = 1 + 0.5 * ease;
+    s.card.scaling.set(sc, sc, sc);
+
+    // 光暈渐溅
+    s.card._glowMat.alpha = t < 0.3 ? 0.8 : 0.8 * (1 - (t - 0.3) / 0.7);
+
+    if (t >= 1) {
+      s.card.rotation.y = Math.PI;
+      s.card.rotation.z = 0;
+      isAnimating = false;
+      s.card._glowMat.alpha = 0;
+      _arFlipState = null;
+      if (s.onComplete) s.onComplete(s.card._fortuneData);
+    }
+  }
+
+  /**
+   * 設定 AR 模式（縮小卡片群組到 1/3）
+   */
+  function setARMode(enabled, arCamera) {
+    _isARMode = enabled;
+    _arCamera = arCamera || null;
+    if (!cardGroup) return;
+    if (enabled) {
+      cardGroup.scaling.set(1/3, 1/3, 1/3);
+    } else {
+      cardGroup.scaling.set(1, 1, 1);
+    }
+  }
+
+  /**
+   * 設定卡片群組世界位置
+   */
+  function setGroupPosition(x, y, z) {
+    if (cardGroup) cardGroup.position.set(x, y, z);
+  }
+
+  /**
+   * 取得卡片群組
+   */
+  function getCardGroup() { return cardGroup; }
 
   /**
    * 重置所有卡片
@@ -553,8 +596,35 @@ const CardManager = (() => {
   function getIsAnimating() { return isAnimating; }
   function getCards() { return cards; }
 
+  /**
+   * 普通模式抓取卡片：飛向中央並翻轉（使用 GSAP）
+   */
+  function grabCard(cardIndex, scene, onComplete) {
+    if (isAnimating || cardIndex < 0 || cardIndex >= cards.length) return;
+    const card = cards[cardIndex];
+    if (card._isRevealed) return;
+
+    isAnimating = true;
+    selectedCard = card;
+    card._isRevealed = true;
+
+    ParticleSystem.createBurst(scene, card.getAbsolutePosition(), card._fortuneData.fortune.color);
+
+    gsap.to(card.position, { x: 0, y: 0.2, z: 3, duration: 0.8, ease: 'power3.inOut' });
+    gsap.to(card.rotation, {
+      y: Math.PI, z: 0,
+      duration: 1.0, ease: 'power3.inOut', delay: 0.3,
+      onComplete: () => { isAnimating = false; if (onComplete) onComplete(card._fortuneData); },
+    });
+    gsap.to(card.scaling, { x: 1.3, y: 1.3, z: 1.3, duration: 0.8, ease: 'power2.out' });
+    gsap.to(card._glowMat, { alpha: 0.6, duration: 0.5 });
+    gsap.to(card._glowMat, { alpha: 0, duration: 0.5, delay: 1.0 });
+  }
+
   return {
-    createCards, updateOrbit, setHover, grabCard,
+    createCards, updateOrbit, setHover,
+    grabCard, grabCardAR, updateARFlip,
+    setARMode, setGroupPosition, getCardGroup,
     resetCards, findClosestCard, getIsAnimating, getCards,
   };
 })();
