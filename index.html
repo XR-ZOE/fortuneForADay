@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>神秘運勢抽卡 — 今日你的命運由此揭曉</title>
+  <meta name="description" content="透過攝影機手勢追蹤，在 3D 空間中抓取旋轉的神秘運勢卡牌，揭曉今日運勢、明日天氣與幸運顏色。">
+  <meta name="theme-color" content="#0a0a1a">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Noto+Serif+TC:wght@400;700&family=Orbitron:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- Three.js (Global UMD Build — v0.160 is last version with UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-state="loading">
+
+  <!-- ====== Camera Video (Hidden) ====== -->
+  <video id="camera-feed" autoplay playsinline muted></video>
+
+  <!-- ====== Three.js Canvas ====== -->
+  <div id="canvas-container"></div>
+
+  <!-- ====== Welcome Screen ====== -->
+  <div id="welcome-screen">
+    <div class="welcome-deco"></div>
+    <div class="welcome-deco"></div>
+
+    <h1 class="welcome-title">神秘運勢抽卡</h1>
+    <p class="welcome-subtitle">Fate Awaits Your Touch</p>
+    <div class="welcome-divider"></div>
+
+    <div class="btn-group">
+      <button id="btn-start-camera" class="btn-mystical">
+        ✋ 啟動攝影機 · 手勢抽卡
+      </button>
+      <button id="btn-start-mouse" class="btn-mystical btn-secondary">
+        🖱 使用滑鼠模式
+      </button>
+    </div>
+  </div>
+
+  <!-- ====== Loading Overlay ====== -->
+  <div id="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">正在初始化...</p>
+    </div>
+  </div>
+
+  <!-- ====== Hint Bar ====== -->
+  <div id="hint-bar"></div>
+
+  <!-- ====== Result Overlay ====== -->
+  <div id="result-overlay">
+    <div class="result-card">
+      <div class="result-header">
+        <h2>✦ 命運已揭曉 ✦</h2>
+        <div class="result-line"></div>
+      </div>
+
+      <!-- 天氣 -->
+      <div class="result-section">
+        <div class="result-section-title">☁ 明日天氣</div>
+        <div class="result-weather">
+          <span id="result-weather-icon" class="result-weather-icon"></span>
+          <div class="result-weather-info">
+            <h3 id="result-weather-name"></h3>
+            <p id="result-weather-desc"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 運勢 -->
+      <div class="result-section">
+        <div class="result-section-title">✦ 今日運勢</div>
+        <div class="result-fortune">
+          <div id="result-fortune-level" class="result-fortune-level"></div>
+          <p id="result-fortune-message" class="result-fortune-message"></p>
+        </div>
+      </div>
+
+      <!-- 幸運顏色 -->
+      <div class="result-section">
+        <div class="result-section-title">◆ 幸運顏色</div>
+        <div class="result-color">
+          <div id="result-color-swatch" class="result-color-swatch"></div>
+          <span id="result-color-name" class="result-color-name"></span>
+        </div>
+      </div>
+
+      <!-- 再抽一次 -->
+      <div class="result-actions">
+        <button id="btn-retry">⟳ 再抽一次</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Scripts (order matters) ====== -->
+  <script src="js/fortune.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/scene.js"></script>
+  <script src="js/cards.js"></script>
+  <script src="js/handTracker.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+</html>
