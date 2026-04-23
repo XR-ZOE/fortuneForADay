@@ -263,7 +263,7 @@ const App = (() => {
       const badge = document.getElementById('engine-badge');
       badge.textContent = 'Three.js · AR';
 
-      showHint('在你面前找到懸浮的命運之卡 — 用拇指和食指捏合抓取');
+      showHint('AR 抽卡 — 點擊螢幕 / 捏合手指 / 按 Trigger 皆可抓取');
 
       // session 結束時恢復普通模式
       session.addEventListener('end', () => {
@@ -288,16 +288,12 @@ const App = (() => {
    */
   function beginDrawingAR() {
     hideWelcome();
-
-    // AR 模式下卡片放在使用者前方 1.5m，稍微偏下（腰部高度）
     CardManager.createCards(scene);
 
-    // AR 模式下不用 HandTracker 的 onMove/onGrab（改用 XRFrame 手部追蹤）
-    // 但仍然需要設定 callback 供 detectARHandGesture 呼叫
-    HandTracker.onMove(() => {}); // AR 模式暫時不做 hover
+    HandTracker.onMove(() => {});
     HandTracker.onGrab((pos) => {
       if (CardManager.getIsAnimating()) return;
-      const closest = CardManager.findClosestCard(pos, 1.2);
+      const closest = CardManager.findClosestCard(pos, 1.5);
       if (closest) {
         CardManager.grabCard(closest.index, scene, (fortuneData) => {
           showResult(fortuneData);
@@ -306,34 +302,95 @@ const App = (() => {
       }
     });
 
+    // 螢幕點擊 / 觸碰 fallback（手機 AR 或 Emulator 滑鼠點擊）
+    _setupARTouchAndController();
     setState(STATE.DRAWING);
   }
 
+  /** 在 canvas 上註冊觸碰/點擊事件作為 AR 抓取 fallback */
+  function _setupARTouchAndController() {
+    const canvas = document.querySelector('#canvas-container canvas');
+    if (!canvas) return;
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      _triggerARGrabNearest();
+    }, { passive: false });
+    canvas.addEventListener('click', () => {
+      if (isARMode) _triggerARGrabNearest();
+    });
+  }
+
+  /** 用攝影機前方 1m 作探針，抓取最近的卡片 */
+  function _triggerARGrabNearest() {
+    const grabCb = HandTracker._getGrabCallback ? HandTracker._getGrabCallback() : null;
+    if (!grabCb || CardManager.getIsAnimating()) return;
+    const cam = SceneManager.getCamera();
+    if (!cam) return;
+    const forward = new THREE.Vector3();
+    cam.getWorldDirection(forward);
+    const probePos = cam.position.clone().add(forward);
+    grabCb(probePos);
+  }
+
   /**
-   * 偵測 AR 模式下的 XR 手部 pinch 手勢
-   * 呼叫 HandTracker.onGrab 的 callback
+   * AR 模式輸入偵測 — 每幀呼叫，同時支援三種方式（互不干擾）：
+   *  1. XRHand pinch — 拇指+食指捏合 (Quest 手部追蹤 / 部分 Android)
+   *  2. XR controller trigger — 按下 trigger (Quest 控制器 / Emulator)
+   *  3. 螢幕點擊/觸碰 — 在 beginDrawingAR 中已單獨註冊 canvas 事件
    */
   function detectARHandGesture(frame) {
-    // 檢查兩隻手
-    for (const handedness of ['right', 'left']) {
-      const handData = SceneManager.getHandPinchPosition(frame, handedness);
-      if (!handData) {
-        arWasPinching[handedness] = false;
-        continue;
+    if (!frame) return;
+    const session = frame.session;
+    if (!session) return;
+
+    for (const inputSource of session.inputSources) {
+      const h = inputSource.handedness; // 'left' | 'right' | 'none'
+
+      // ---- 方式 1: XRHand pinch 手勢 ----
+      if (inputSource.hand) {
+        const handData = SceneManager.getHandPinchPosition(frame, h);
+        if (handData) {
+          const isPinching = handData.isPinching;
+          const wasP = arWasPinching[h] ?? false;
+          if (!wasP && isPinching) {
+            const grabCb = HandTracker._getGrabCallback?.();
+            if (grabCb) grabCb(handData.position);
+          }
+          arWasPinching[h] = isPinching;
+        } else {
+          arWasPinching[h] = false;
+        }
+        continue; // 有手部追蹤就跳過 gamepad 檢查
       }
 
-      const { position, isPinching } = handData;
-      const wasP = arWasPinching[handedness];
-
-      // 僅在捏合「開始」那一刻觸發（上一幀沒在捏，這幀捏了）
-      if (!wasP && isPinching) {
-        // 呼叫 grab callback
-        const grabCb = HandTracker._getGrabCallback ? HandTracker._getGrabCallback() : null;
-        if (grabCb) grabCb(position);
+      // ---- 方式 2: XR controller trigger ----
+      if (inputSource.gamepad) {
+        const triggerPressed = inputSource.gamepad.buttons?.[0]?.pressed ?? false;
+        const key = h + '_trigger';
+        const wasT = arWasPinching[key] ?? false;
+        if (!wasT && triggerPressed) {
+          // 用 controller 射線方向延伸 1m 作為探針位置
+          const ray = _getControllerRayPosition(frame, inputSource);
+          const grabCb = HandTracker._getGrabCallback?.();
+          if (grabCb && ray) grabCb(ray);
+        }
+        arWasPinching[key] = triggerPressed;
       }
-
-      arWasPinching[handedness] = isPinching;
     }
+  }
+
+  /** 取得 XR controller 射線在世界座標中延伸 1m 的位置 */
+  function _getControllerRayPosition(frame, inputSource) {
+    const xrRefSpace = SceneManager.getXRReferenceSpace();
+    if (!xrRefSpace || !inputSource.targetRaySpace) return null;
+    const pose = frame.getPose(inputSource.targetRaySpace, xrRefSpace);
+    if (!pose) return null;
+    const p = pose.transform.position;
+    const o = pose.transform.orientation;
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(
+      new THREE.Quaternion(o.x, o.y, o.z, o.w)
+    );
+    return new THREE.Vector3(p.x, p.y, p.z).add(dir);
   }
 
   // ========== 普通渲染循環 ==========
