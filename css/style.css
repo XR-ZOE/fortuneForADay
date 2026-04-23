@@ -132,7 +132,7 @@ html, body {
   width: 120px;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  margin-bottom: 2.5em;
+  margin-bottom: 2em;
 }
 
 .btn-group {
@@ -224,6 +224,105 @@ html, body {
 @keyframes decoRotate {
   from { transform: translate(-50%, -50%) rotate(0deg); }
   to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ================================================
+   ENGINE SELECTOR
+   ================================================ */
+.engine-selector {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 2em;
+  animation: fadeInUp 1s ease 0.8s both;
+}
+
+.engine-label {
+  font-family: var(--font-accent);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.engine-label.active {
+  color: var(--gold);
+  text-shadow: 0 0 15px var(--gold-glow);
+}
+
+.engine-toggle {
+  position: relative;
+  cursor: pointer;
+}
+
+.engine-toggle input {
+  display: none;
+}
+
+.engine-toggle-track {
+  display: block;
+  width: 52px;
+  height: 26px;
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid var(--gold);
+  border-radius: 13px;
+  position: relative;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.engine-toggle-track:hover {
+  box-shadow: 0 0 18px var(--gold-glow);
+}
+
+.engine-toggle-thumb {
+  display: block;
+  width: 20px;
+  height: 20px;
+  background: var(--gold);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px var(--gold-glow);
+}
+
+.engine-toggle input:checked + .engine-toggle-track {
+  background: rgba(201, 168, 76, 0.22);
+}
+
+.engine-toggle input:checked + .engine-toggle-track .engine-toggle-thumb {
+  transform: translateX(26px);
+}
+
+/* ================================================
+   ENGINE BADGE (shown during drawing)
+   ================================================ */
+#engine-badge {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 90;
+  padding: 0.35em 1em;
+  font-family: var(--font-accent);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  background: rgba(15, 10, 35, 0.6);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
+}
+
+#engine-badge.visible {
+  opacity: 0.7;
+  transform: translateY(0);
 }
 
 /* ================================================
@@ -490,6 +589,14 @@ html, body {
   #camera-feed {
     width: 100px;
     height: 75px;
+  }
+
+  .engine-selector {
+    gap: 0.6em;
+  }
+
+  .engine-label {
+    font-size: 0.72rem;
   }
 }
 

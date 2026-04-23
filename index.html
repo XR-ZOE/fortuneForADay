@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>神秘運勢抽卡 — 今日你的命運由此揭曉</title>
-  <meta name="description" content="透過攝影機手勢追蹤，在 3D 空間中抓取旋轉的神秘運勢卡牌，揭曉今日運勢、明日天氣與幸運顏色。">
+  <meta name="description" content="透過攝影機手勢追蹤，在 3D 空間中抓取旋轉的神秘運勢卡牌，揭曉今日運勢、明日天氣與幸運顏色。支援 Three.js 與 Babylon.js 雙引擎。">
   <meta name="theme-color" content="#0a0a1a">
 
   <!-- Google Fonts -->
@@ -12,10 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Noto+Serif+TC:wght@400;700&family=Orbitron:wght@400;600&display=swap" rel="stylesheet">
 
-  <!-- Three.js (Global UMD Build — v0.160 is last version with UMD) -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-
-  <!-- GSAP -->
+  <!-- GSAP（兩個引擎共用） -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 
   <!-- Styles -->
@@ -26,7 +23,7 @@
   <!-- ====== Camera Video (Hidden) ====== -->
   <video id="camera-feed" autoplay playsinline muted></video>
 
-  <!-- ====== Three.js Canvas ====== -->
+  <!-- ====== 3D Canvas Container ====== -->
   <div id="canvas-container"></div>
 
   <!-- ====== Welcome Screen ====== -->
@@ -37,6 +34,18 @@
     <h1 class="welcome-title">神秘運勢抽卡</h1>
     <p class="welcome-subtitle">Fate Awaits Your Touch</p>
     <div class="welcome-divider"></div>
+
+    <!-- 引擎選擇器 -->
+    <div class="engine-selector" id="engine-selector">
+      <span class="engine-label active" data-engine="threejs">Three.js</span>
+      <label class="engine-toggle">
+        <input type="checkbox" id="engine-switch">
+        <span class="engine-toggle-track">
+          <span class="engine-toggle-thumb"></span>
+        </span>
+      </label>
+      <span class="engine-label" data-engine="babylon">Babylon.js</span>
+    </div>
 
     <div class="btn-group">
       <button id="btn-start-camera" class="btn-mystical">
@@ -58,6 +67,9 @@
 
   <!-- ====== Hint Bar ====== -->
   <div id="hint-bar"></div>
+
+  <!-- ====== Engine Badge (during drawing) ====== -->
+  <div id="engine-badge"></div>
 
   <!-- ====== Result Overlay ====== -->
   <div id="result-overlay">
@@ -104,12 +116,8 @@
     </div>
   </div>
 
-  <!-- ====== Scripts (order matters) ====== -->
+  <!-- ====== Scripts（只載入共用模組，引擎腳本動態載入） ====== -->
   <script src="js/fortune.js"></script>
-  <script src="js/particles.js"></script>
-  <script src="js/scene.js"></script>
-  <script src="js/cards.js"></script>
-  <script src="js/handTracker.js"></script>
   <script src="js/main.js"></script>
 
 </body>
