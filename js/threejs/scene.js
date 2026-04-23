@@ -233,6 +233,14 @@ const SceneManager = (() => {
     }
   }
 
+  function onResize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(width, height);
+  }
+
   /**
    * 取得手部指向射線（用食指尖 + 手腕方向）
    * @param {XRFrame} frame
