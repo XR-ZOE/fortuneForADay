@@ -560,10 +560,13 @@ const CardManager = (() => {
   function findClosestCard(worldPos, threshold) {
     let closestIdx = -1;
     let closestDist = Infinity;
+    const cardWorldPos = new THREE.Vector3();
 
     cards.forEach((card, idx) => {
       if (card._isRevealed) return;
-      const dist = card.position.distanceTo(worldPos);
+      // 使用世界座標（考慮 cardGroup 的 position/scale/rotation）
+      card.getWorldPosition(cardWorldPos);
+      const dist = cardWorldPos.distanceTo(worldPos);
       if (dist < closestDist) {
         closestDist = dist;
         closestIdx = idx;
@@ -584,12 +587,17 @@ const CardManager = (() => {
     if (cardGroup) cardGroup.position.set(x, y, z);
   }
 
-  /** 啟用/關閉 AR 模式（調整軌道半徑、高度、攝影機參照） */
+  /** 啟用/關閉 AR 模式（調整軌道半徑、速度、縮放和攝影機參照） */
   function setARMode(enabled, camera) {
     isARMode = enabled;
     arCamera = camera || null;
     ORBIT_RADIUS = enabled ? ORBIT_RADIUS_AR : ORBIT_RADIUS_NORMAL;
     orbitSpeed   = enabled ? ORBIT_SPEED_AR  : ORBIT_SPEED_NORMAL;
+    // AR 模式下縮小到 1/3： WebXR 1單位=1公尺，原始 1.6m 丹大、縮至約 0.53m 才自然
+    if (cardGroup) {
+      const s = enabled ? 1 / 3 : 1;
+      cardGroup.scale.set(s, s, s);
+    }
   }
 
   return {

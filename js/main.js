@@ -300,7 +300,8 @@ const App = (() => {
     HandTracker.onMove(() => {});
     HandTracker.onGrab((pos) => {
       if (CardManager.getIsAnimating()) return;
-      const closest = CardManager.findClosestCard(pos, 1.5);
+      // AR 卡片縮小 1/3，加大關益區（world space）至 2.0m
+      const closest = CardManager.findClosestCard(pos, 2.0);
       if (closest) {
         CardManager.grabCard(closest.index, scene, (fortuneData) => {
           showResult(fortuneData);
@@ -335,7 +336,8 @@ const App = (() => {
     if (!cam) return;
     const forward = new THREE.Vector3();
     cam.getWorldDirection(forward);
-    const probePos = cam.position.clone().add(forward);
+    // AR 卡片組在使用者前方 2m，探針打到那個距離
+    const probePos = cam.position.clone().add(forward.multiplyScalar(2.0));
     grabCb(probePos);
   }
 
