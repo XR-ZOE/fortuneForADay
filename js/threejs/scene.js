@@ -233,12 +233,73 @@ const SceneManager = (() => {
     }
   }
 
-  function onResize() {
-    width = window.innerWidth;
-    height = window.innerHeight;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
+  /**
+   * 取得手部指向射線（用食指尖 + 手腕方向）
+   * @param {XRFrame} frame
+   * @param {string} handedness - 'left' | 'right'
+   * @returns {{ origin, direction, isPinching }|null}
+   */
+  function getHandRay(frame, handedness) {
+    if (!frame || !xrReferenceSpace) return null;
+    const session = renderer.xr.getSession();
+    if (!session) return null;
+
+    for (const inputSource of session.inputSources) {
+      if (inputSource.handedness !== handedness) continue;
+      if (!inputSource.hand) continue;
+
+      const wristJ     = inputSource.hand.get('wrist');
+      const indexTipJ  = inputSource.hand.get('index-finger-tip');
+      const thumbTipJ  = inputSource.hand.get('thumb-tip');
+      if (!wristJ || !indexTipJ) continue;
+
+      const wristPose    = frame.getJointPose(wristJ,    xrReferenceSpace);
+      const indexTipPose = frame.getJointPose(indexTipJ, xrReferenceSpace);
+      if (!wristPose || !indexTipPose) continue;
+
+      const wp = wristPose.transform.position;
+      const ip = indexTipPose.transform.position;
+
+      // 射線原點：食指尖
+      const origin = new THREE.Vector3(ip.x, ip.y, ip.z);
+
+      // 射線方向：手腕 → 食指尖（穩定的指向方向）
+      const wristVec = new THREE.Vector3(wp.x, wp.y, wp.z);
+      const direction = origin.clone().sub(wristVec).normalize();
+
+      // 捏合偵測：拇指尖 + 食指尖距離 < 4cm
+      let isPinching = false;
+      if (thumbTipJ) {
+        const thumbPose = frame.getJointPose(thumbTipJ, xrReferenceSpace);
+        if (thumbPose) {
+          const tp = thumbPose.transform.position;
+          const d = Math.sqrt((ip.x-tp.x)**2 + (ip.y-tp.y)**2 + (ip.z-tp.z)**2);
+          isPinching = d < 0.04;
+        }
+      }
+
+      return { origin, direction, isPinching, handedness };
+    }
+    return null;
+  }
+
+  /**
+   * 取得 XR controller 的射線（原點 + 方向）
+   * @param {XRFrame} frame
+   * @param {XRInputSource} inputSource
+   * @returns {{ origin, direction }|null}
+   */
+  function getControllerRay(frame, inputSource) {
+    if (!xrReferenceSpace || !inputSource.targetRaySpace) return null;
+    const pose = frame.getPose(inputSource.targetRaySpace, xrReferenceSpace);
+    if (!pose) return null;
+    const p = pose.transform.position;
+    const o = pose.transform.orientation;
+    const origin    = new THREE.Vector3(p.x, p.y, p.z);
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(
+      new THREE.Quaternion(o.x, o.y, o.z, o.w)
+    );
+    return { origin, direction };
   }
 
   function render() {
@@ -255,6 +316,7 @@ const SceneManager = (() => {
   return {
     init, render, getScene, getCamera, getRenderer,
     isARSupported, startAR, stopAR, setARAnimationLoop, getIsAR,
-    getHandPinchPosition, getARCardOffset, getXRReferenceSpace,
+    getHandPinchPosition, getHandRay, getControllerRay,
+    getARCardOffset, getXRReferenceSpace,
   };
 })();

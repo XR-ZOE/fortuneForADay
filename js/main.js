@@ -23,8 +23,9 @@ const App = (() => {
   let currentEngine = 'threejs';
   let isARMode = false;
 
-  // AR 手勢狀態
-  let arWasPinching = { left: false, right: false };
+  // AR 射線指向狀態
+  let arWasPinching = {};
+  let arPointedCardIndex = -1; // 當前被指向的卡片 index（-1 表示無）
 
   // ========== 動態腳本載入 ==========
 
@@ -250,8 +251,8 @@ const App = (() => {
       SceneManager.setARAnimationLoop((timestamp, frame) => {
         const elapsed = getElapsedTime();
 
-        // XR 手部手勢偵測
-        if (frame) detectARHandGesture(frame);
+        // XR 射線指向 + 捏合偵測（每幀）
+        if (frame) detectARRayPointing(frame);
 
         CardManager.updateOrbit(elapsed);
         ParticleSystem.updateStarField(elapsed);
@@ -268,8 +269,9 @@ const App = (() => {
       // session 結束時恢復普通模式
       session.addEventListener('end', () => {
         isARMode = false;
-        arWasPinching = { left: false, right: false };
-        CardManager.setARMode(false, null); // 恢復普通軌道
+        arWasPinching = {};
+        arPointedCardIndex = -1;
+        CardManager.setARMode(false, null);
         CardManager.setGroupPosition(0, 0, 0);
         animate();
         showHint('已退出 AR 模式');
@@ -328,78 +330,98 @@ const App = (() => {
     });
   }
 
-  /** 用攝影機前方 1m 作探針，抓取最近的卡片 */
+  /** 螢幕點擊/觸碰 → 抓取當前射線指向的卡（若無則略過） */
   function _triggerARGrabNearest() {
-    const grabCb = HandTracker._getGrabCallback ? HandTracker._getGrabCallback() : null;
-    if (!grabCb || CardManager.getIsAnimating()) return;
-    const cam = SceneManager.getCamera();
-    if (!cam) return;
-    const forward = new THREE.Vector3();
-    cam.getWorldDirection(forward);
-    // AR 卡片組在使用者前方 2m，探針打到那個距離
-    const probePos = cam.position.clone().add(forward.multiplyScalar(2.0));
-    grabCb(probePos);
+    if (arPointedCardIndex >= 0) {
+      _grabARCard(arPointedCardIndex);
+    }
+    // 備援：若沒有指向任何卡（例如螢幕點擊時沒有手部射線），不動作
   }
 
   /**
-   * AR 模式輸入偵測 — 每幀呼叫，同時支援三種方式（互不干擾）：
-   *  1. XRHand pinch — 拇指+食指捏合 (Quest 手部追蹤 / 部分 Android)
-   *  2. XR controller trigger — 按下 trigger (Quest 控制器 / Emulator)
-   *  3. 螢幕點擊/觸碰 — 在 beginDrawingAR 中已單獨註冊 canvas 事件
+   * AR 射線指向系統 — 每幀呼叫
+   *
+   * 流程：
+   *  1. 從手部（食指尖 + 手腕方向）或 controller（targetRaySpace）取得射線
+   *  2. 計算射線與各卡片間的夾角（< 12°視為「指向」）
+   *  3. 指向的卡片亮框（setHover）
+   *  4. 捏合 / trigger press → 選取當前指向的卡片
    */
-  function detectARHandGesture(frame) {
+  function detectARRayPointing(frame) {
     if (!frame) return;
     const session = frame.session;
     if (!session) return;
 
-    for (const inputSource of session.inputSources) {
-      const h = inputSource.handedness; // 'left' | 'right' | 'none'
+    let bestCardIdx  = -1;
+    let bestAngle    = 0.21; // cos 夾角閾值：約 12°
+    const _cardWPos  = new THREE.Vector3();
 
-      // ---- 方式 1: XRHand pinch 手勢 ----
+    for (const inputSource of session.inputSources) {
+      const h = inputSource.handedness;
+
+      // ---- 手部追蹤：射線 = 手腕 → 食指尖 ----
       if (inputSource.hand) {
-        const handData = SceneManager.getHandPinchPosition(frame, h);
-        if (handData) {
-          const isPinching = handData.isPinching;
-          const wasP = arWasPinching[h] ?? false;
-          if (!wasP && isPinching) {
-            const grabCb = HandTracker._getGrabCallback?.();
-            if (grabCb) grabCb(handData.position);
-          }
-          arWasPinching[h] = isPinching;
-        } else {
-          arWasPinching[h] = false;
+        const ray = SceneManager.getHandRay(frame, h);
+        if (!ray) { arWasPinching[h] = false; continue; }
+
+        // 找夾角最小的卡片
+        CardManager.getCards().forEach((card, idx) => {
+          if (card._isRevealed) return;
+          card.getWorldPosition(_cardWPos);
+          const toCard = _cardWPos.clone().sub(ray.origin).normalize();
+          const cosA = toCard.dot(ray.direction);
+          if (cosA > bestAngle) { bestAngle = cosA; bestCardIdx = idx; }
+        });
+
+        // 捏合（上一幀沒捏，這幀捏了）→ 抓取當前指向的卡
+        const wasP = arWasPinching[h] ?? false;
+        if (!wasP && ray.isPinching && bestCardIdx >= 0) {
+          _grabARCard(bestCardIdx);
         }
-        continue; // 有手部追蹤就跳過 gamepad 檢查
+        arWasPinching[h] = ray.isPinching;
+        continue;
       }
 
-      // ---- 方式 2: XR controller trigger ----
+      // ---- Controller：射線 = targetRaySpace ----
       if (inputSource.gamepad) {
+        const ray = SceneManager.getControllerRay(frame, inputSource);
+        if (ray) {
+          CardManager.getCards().forEach((card, idx) => {
+            if (card._isRevealed) return;
+            card.getWorldPosition(_cardWPos);
+            const toCard = _cardWPos.clone().sub(ray.origin).normalize();
+            const cosA = toCard.dot(ray.direction);
+            if (cosA > bestAngle) { bestAngle = cosA; bestCardIdx = idx; }
+          });
+        }
+
+        // Trigger press → 抓取
         const triggerPressed = inputSource.gamepad.buttons?.[0]?.pressed ?? false;
         const key = h + '_trigger';
         const wasT = arWasPinching[key] ?? false;
-        if (!wasT && triggerPressed) {
-          // 用 controller 射線方向延伸 1m 作為探針位置
-          const ray = _getControllerRayPosition(frame, inputSource);
-          const grabCb = HandTracker._getGrabCallback?.();
-          if (grabCb && ray) grabCb(ray);
+        if (!wasT && triggerPressed && bestCardIdx >= 0) {
+          _grabARCard(bestCardIdx);
         }
         arWasPinching[key] = triggerPressed;
       }
     }
+
+    // 更新 hover 狀態（每幀都要刷新，否則舊 hover 殘留）
+    if (bestCardIdx !== arPointedCardIndex) {
+      if (arPointedCardIndex >= 0) CardManager.setHover(arPointedCardIndex, 0);
+      if (bestCardIdx >= 0)        CardManager.setHover(bestCardIdx, 1.0);
+      arPointedCardIndex = bestCardIdx;
+    }
   }
 
-  /** 取得 XR controller 射線在世界座標中延伸 1m 的位置 */
-  function _getControllerRayPosition(frame, inputSource) {
-    const xrRefSpace = SceneManager.getXRReferenceSpace();
-    if (!xrRefSpace || !inputSource.targetRaySpace) return null;
-    const pose = frame.getPose(inputSource.targetRaySpace, xrRefSpace);
-    if (!pose) return null;
-    const p = pose.transform.position;
-    const o = pose.transform.orientation;
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(
-      new THREE.Quaternion(o.x, o.y, o.z, o.w)
-    );
-    return new THREE.Vector3(p.x, p.y, p.z).add(dir);
+  /** AR 模式下抓取指定卡片（統一入口） */
+  function _grabARCard(cardIdx) {
+    if (CardManager.getIsAnimating()) return;
+    CardManager.grabCard(cardIdx, scene, (fortuneData) => {
+      arPointedCardIndex = -1;
+      showResult(fortuneData);
+      setState(STATE.RESULT);
+    });
   }
 
   // ========== 普通渲染循環 ==========
