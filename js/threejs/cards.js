@@ -552,8 +552,10 @@ const CardManager = (() => {
   }
 
   /**
-   * AR 模式專用抓取：原地翻轉，不飛移位置（避免座標空間轉換複雜度）
+   * AR 模式專用抓取：原地翻轉（不依賴 GSAP，用渲染循環手動插值）
    */
+  let _arFlipState = null; // { card, startY, startScale, elapsed, duration, onComplete }
+
   function grabCardAR(cardIndex, scene, onComplete) {
     if (isAnimating || cardIndex < 0 || cardIndex >= cards.length) return;
     const card = cards[cardIndex];
@@ -568,28 +570,51 @@ const CardManager = (() => {
     card.getWorldPosition(cardWorldPos);
     ParticleSystem.createBurst(scene, cardWorldPos, card._fortuneData.fortune.color);
 
-    // 原地翻轉（只改 rotation，不動 position）
-    gsap.to(card.rotation, {
-      y: 0,  // 正面朝向攝影機
-      z: 0,
-      duration: 1.0,
-      ease: 'power3.inOut',
-      onComplete: () => {
-        isAnimating = false;
-        if (onComplete) onComplete(card._fortuneData);
-      },
-    });
+    // 光暈立即亮起（直接設值，不用 GSAP）
+    card._glowMesh.material.opacity = 0.8;
 
-    // 略微放大（原地縮放 1.5x）
-    gsap.to(card.scale, {
-      x: 1.5, y: 1.5, z: 1.5,
-      duration: 0.6,
-      ease: 'back.out(1.5)',
-    });
+    // 記錄翻轉起始狀態
+    _arFlipState = {
+      card,
+      startY: card.rotation.y,
+      elapsed: 0,
+      duration: 1.0, // 秒
+      onComplete,
+    };
+  }
 
-    // 強光暈（AR 場景中光暈更醒目）
-    gsap.to(card._glowMesh.material, { opacity: 0.8, duration: 0.3 });
-    gsap.to(card._glowMesh.material, { opacity: 0, duration: 0.8, delay: 1.2 });
+  /**
+   * 每幀呼叫（由 main.js XR 渲染循環呼叫），推進 AR 翻轉動畫
+   * @param {number} dt - delta time in seconds
+   */
+  function updateARFlip(dt) {
+    if (!_arFlipState) return;
+    const s = _arFlipState;
+    s.elapsed += dt;
+    const t = Math.min(s.elapsed / s.duration, 1);
+
+    // easeInOut cubic
+    const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    // 目標 y = 0（正面），從 startY 插值
+    s.card.rotation.y = s.startY * (1 - ease);
+    s.card.rotation.z *= (1 - ease); // 同時修正 z 偏轉
+
+    // 放大：1.0 → 1.5
+    const sc = 1 + 0.5 * ease;
+    s.card.scale.set(sc, sc, sc);
+
+    // 光暈：亮起後慢慢消退
+    s.card._glowMesh.material.opacity = t < 0.3 ? 0.8 : 0.8 * (1 - (t - 0.3) / 0.7);
+
+    if (t >= 1) {
+      s.card.rotation.y = 0;
+      s.card.rotation.z = 0;
+      isAnimating = false;
+      s.card._glowMesh.material.opacity = 0;
+      _arFlipState = null;
+      if (s.onComplete) s.onComplete(s.card._fortuneData);
+    }
   }
 
   /**
@@ -663,7 +688,7 @@ const CardManager = (() => {
   }
 
   return {
-    createCards, updateOrbit, setHover, grabCard, grabCardAR,
+    createCards, updateOrbit, setHover, grabCard, grabCardAR, updateARFlip,
     resetCards, findClosestCard, getIsAnimating, getCards,
     setGroupPosition, setARMode,
   };

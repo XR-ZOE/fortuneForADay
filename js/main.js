@@ -248,11 +248,17 @@ const App = (() => {
       beginDrawingAR();
 
       // AR 渲染循環 — 用 setAnimationLoop 而非 rAF
+      let _lastARTimestamp = 0;
       SceneManager.setARAnimationLoop((timestamp, frame) => {
+        const dt = _lastARTimestamp ? Math.min((timestamp - _lastARTimestamp) / 1000, 0.1) : 0.016;
+        _lastARTimestamp = timestamp;
         const elapsed = getElapsedTime();
 
-        // XR 射線指向 + 捏合偵測（每幀）
+        // XR 射線指向（Quest 手部/控制器）
         if (frame) detectARRayPointing(frame);
+
+        // AR 翻牌動畫（手動插值，不依賴 GSAP）
+        CardManager.updateARFlip(dt);
 
         CardManager.updateOrbit(elapsed);
         ParticleSystem.updateStarField(elapsed);
@@ -324,51 +330,63 @@ const App = (() => {
     setState(STATE.DRAWING);
   }
 
-  /** 在 canvas 上註冊觸碰/點擊事件作為 AR 抓取 fallback */
+  /**
+   * 監聽整個畫面的點擊（DOM overlay 模式下，事件在 document 層發臺，不在 canvas）
+   * 退出按鈕的點擊不觸發抓取
+   */
   function _setupARTouchAndController() {
-    const canvas = document.querySelector('#canvas-container canvas');
-    if (!canvas) return;
-    canvas.addEventListener('touchstart', (e) => {
+    const exitBtn = document.getElementById('btn-exit-ar');
+
+    // 手機/裝置觸控
+    document.addEventListener('touchstart', (e) => {
+      if (!isARMode) return;
+      // 如果點到退出按鈕，不觸發抓取
+      if (exitBtn && exitBtn.contains(e.target)) return;
       e.preventDefault();
       _triggerARGrabNearest();
-    }, { passive: false });
-    canvas.addEventListener('click', () => {
-      if (isARMode) _triggerARGrabNearest();
-    });
+    }, { passive: false, capture: true });
+
+    // Emulator 滑鼠點擊
+    document.addEventListener('click', (e) => {
+      if (!isARMode) return;
+      if (exitBtn && exitBtn.contains(e.target)) return;
+      _triggerARGrabNearest();
+    }, { capture: true });
   }
 
   /** 螢幕點擊/觸碰 → 抓取卡片
    *  - 有手部射線指向時：抓取指向的卡片
    *  - 無手部射線（一般手機 AR）：用攝影機正前方射線找最近的卡
    */
+  /** 打击最靠近摄影機正前方的卡片（手機 AR 點擊用） */
   function _triggerARGrabNearest() {
-    // 優先：射線系統已有鎖定的卡
-    if (arPointedCardIndex >= 0) {
-      _grabARCard(arPointedCardIndex);
-      return;
-    }
+    if (CardManager.getIsAnimating()) return;
 
-    // Fallback：從攝影機正前方射線找最靠近的卡（手機普通 AR tap）
     const cam = SceneManager.getCamera();
-    if (!cam || CardManager.getIsAnimating()) return;
+    if (!cam) return;
 
     const origin    = cam.position.clone();
     const direction = new THREE.Vector3();
     cam.getWorldDirection(direction);
 
-    let bestIdx   = -1;
-    let bestCosA  = 0.17; // cos(80°)，只要大致在前方 80° 內都算
-    const _wPos   = new THREE.Vector3();
+    let bestIdx  = -1;
+    let bestCosA = 0;   // cosA > 0 = 在視野前方半球都算
+    const _wPos  = new THREE.Vector3();
 
     CardManager.getCards().forEach((card, idx) => {
       if (card._isRevealed) return;
       card.getWorldPosition(_wPos);
-      const toCard = _wPos.clone().sub(origin).normalize();
-      const cosA   = toCard.dot(direction);
+      const toCard = _wPos.clone().sub(origin);
+      if (toCard.length() < 0.01) return;
+      toCard.normalize();
+      const cosA = toCard.dot(direction);
       if (cosA > bestCosA) { bestCosA = cosA; bestIdx = idx; }
     });
 
-    if (bestIdx >= 0) _grabARCard(bestIdx);
+    // 找到刷新: 第一張最靠近正前方的卡片翻面
+    if (bestIdx >= 0) {
+      _grabARCard(bestIdx);
+    }
   }
 
   /**
